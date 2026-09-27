@@ -19,6 +19,11 @@ dist-*/
 .env
 .env*.local
 
+# Disposable test-account email written by the local auth/integration runs. It is
+# a real inbox address, so it must never be committed. Root-anchored so it
+# cannot reach anything under src/ or assets/.
+/.test-email.txt
+
 # Native
 .kotlin/
 *.orig.*
