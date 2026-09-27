@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/ui/AppIcon';
 import { useRoleGuard } from '@/auth/RoleGuard';
-import { EMPLOYER_TABS, detailScreensForRole } from '@/config/navConfig';
+import { EMPLOYER_TABS, detailScreensForRole, screenNameForPath } from '@/config/navConfig';
 import { colors, layout, typography } from '@/theme/tokens';
 
 const TAB_BAR_PADDING_TOP = 6;
@@ -28,6 +28,12 @@ export default function EmployerLayout() {
 
   return (
     <Tabs
+      /*
+       * Same reasoning as the candidate shell: a hidden detail route is a tab in
+       * this navigator, so `history` keeps Back pointing at the tab the user came
+       * from instead of bouncing to the first route.
+       */
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.colorPrimary,
@@ -36,10 +42,16 @@ export default function EmployerLayout() {
         tabBarLabelStyle: styles.tabLabel,
         sceneStyle: { backgroundColor: colors.colorBgPage },
       }}>
+      {/*
+        The screen name is the route path relative to this layout, so an employer
+        tab is `employer/home`, not `home`. `<Tabs.Screen name="home">` names a
+        route that does not exist in this tree, which is how the whole employer
+        tab bar ended up unregistered.
+      */}
       {EMPLOYER_TABS.map((tab) => (
         <Tabs.Screen
           key={tab.name}
-          name={tab.name}
+          name={screenNameForPath(tab.path)}
           options={{
             title: tab.label,
             tabBarAccessibilityLabel: tab.label,

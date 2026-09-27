@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/ui/AppIcon';
 import { useRoleGuard } from '@/auth/RoleGuard';
-import { CANDIDATE_TABS, detailScreensForRole } from '@/config/navConfig';
+import { CANDIDATE_TABS, detailScreensForRole, screenNameForPath } from '@/config/navConfig';
 import { colors, layout, typography } from '@/theme/tokens';
 
 const TAB_BAR_PADDING_TOP = 6;
@@ -34,6 +34,13 @@ export default function CandidateLayout() {
 
   return (
     <Tabs
+      /*
+       * Detail routes (skills, settings, notifications, …) are hidden tabs, not
+       * stack pushes, so the tab navigator decides where Back lands. The default
+       * (`firstRoute`) sent every Back to Home; `history` returns to the tab the
+       * user actually came from, which is the parent a profile section has.
+       */
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.colorPrimary,
@@ -45,7 +52,11 @@ export default function CandidateLayout() {
       {CANDIDATE_TABS.map((tab) => (
         <Tabs.Screen
           key={tab.name}
-          name={tab.name}
+          // Route name, resolved from the declared path in one place: the
+          // candidate tree happens to make the logical and route names equal,
+          // but the employer tree does not, and hard-coding one of the two is
+          // how a whole tab bar ends up declaring screens that do not exist.
+          name={screenNameForPath(tab.path)}
           options={{
             title: tab.label,
             tabBarAccessibilityLabel: tab.label,

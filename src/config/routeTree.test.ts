@@ -34,29 +34,44 @@ const APP_DIR = fileURLToPath(new URL('../app', import.meta.url));
 /**
  * Resolves a declared URL path to the file that implements it.
  *
- * expo-router strips a route-group directory from the URL, but the employer tree
- * also keeps a literal `employer/` segment in its paths so they stay namespaced.
- * The two rules together mean:
+ * expo-router strips a route-group directory from the URL but keeps every other
+ * segment, and the employer tree deliberately keeps a literal `employer/`
+ * directory inside its group so its URLs stay namespaced. The two rules together
+ * mean a declared path maps to the file of the same relative path inside the
+ * group that owns it:
  *
  *   `/home`            -> app/(candidate)/home.tsx
- *   `/employer/home`   -> app/(employer)/home.tsx
+ *   `/employer/home`   -> app/(employer)/employer/home.tsx
  *
- * so the `employer` prefix has to be stripped when resolving, and re-applied
- * when walking the tree in the other direction.
+ * This used to strip the `employer` prefix and look for
+ * `app/(employer)/home.tsx`, which is served at `/home` and therefore collides
+ * with the candidate home. That mapping made the test agree with itself while
+ * the app showed "Unmatched Route" for every `/employer/*` push, so the test
+ * passed and the employer tree was unreachable. Resolution now goes through the
+ * directory that actually produces the URL.
  */
 const GROUPS = ['(candidate)', '(employer)'] as const;
 
-/** The URL path a file inside a group directory is served at. */
-function routePathFor(group: (typeof GROUPS)[number], relative: string): string {
-  const prefix = group === '(employer)' ? '/employer' : '';
-  return `${prefix}/${relative}`;
+/**
+ * The URL path a file inside a group directory is served at.
+ *
+ * The group contributes nothing (a route group is transparent in the URL) and
+ * every other directory level is kept, so the relative path is the whole answer.
+ */
+function routePathFor(relative: string): string {
+  return `/${relative}`;
 }
 
 /** The file that serves a declared path, or null when nothing does. */
 function fileForPath(path: string): string | null {
-  for (const group of GROUPS) {
-    const relative = group === '(employer)' ? path.replace(/^\/employer/, '') : path;
-    const direct = `${APP_DIR}/${group}${relative}.tsx`;
+  const relative = path.replace(/^\//, '');
+  // Only the group that owns the path may serve it. A candidate path is never
+  // allowed to resolve inside `(employer)`, and vice versa.
+  const groups: (typeof GROUPS)[number][] = relative.startsWith('employer/')
+    ? ['(employer)']
+    : ['(candidate)'];
+  for (const group of groups) {
+    const direct = `${APP_DIR}/${group}/${relative}.tsx`;
     if (existsSync(direct)) return direct;
   }
   return null;
@@ -123,8 +138,18 @@ describe('route files on disk', () => {
           .slice(`${APP_DIR}/${group}/`.length)
           .replace(/\\/g, '/')
           .replace(/\.tsx$/, '');
-        const route = routePathFor(group, relative);
+        const route = routePathFor(relative);
         expect(declared.has(route), `undeclared screen: ${group}/${relative}`).toBe(true);
+
+        // A screen must also sit in the group that owns its route. Without this,
+        // `app/(employer)/home.tsx` resolves to `/home` — a route the candidate
+        // inventory already declares — so the screen looked declared while
+        // shadowing the candidate home and leaving `/employer/home` unserved.
+        const ownedByEmployer = route.startsWith('/employer/');
+        expect(
+          ownedByEmployer,
+          `${group}/${relative} is served at ${route}, which does not belong to the ${group} tree`,
+        ).toBe(group === '(employer)');
       }
     }
   });
@@ -247,6 +272,17 @@ describe('tab bar contents', () => {
       expect(source).toContain(role === 'candidate' ? 'CANDIDATE_TABS' : 'EMPLOYER_TABS');
       expect(source).toMatch(/\.map\(\(tab\) =>[\s\S]*?<Tabs\.Screen/);
 
+      // And each tab must be named by the route expo-router actually has.
+      // `name={tab.name}` declares a screen the employer tree does not contain
+      // (`home` instead of `employer/home`), which unregisters the whole bar.
+      expect(
+        source,
+        `${shell} must name its tabs by route name, not the short logical name`,
+      ).toContain('name={screenNameForPath(tab.path)}');
+      expect(source, `${shell} must not name a tab by its logical name`).not.toContain(
+        'name={tab.name}',
+      );
+
       // Detail routes come from the same inventory, each declared `href: null`.
       expect(source).toContain(`detailScreensForRole('${role}')`);
       expect(source).toContain('options={{ href: null }}');
@@ -274,12 +310,13 @@ describe('detail route back navigation', () => {
 
   for (const role of ['candidate', 'employer'] as const) {
     it(`${role}: every detail screen offers a way back`, () => {
-      for (const detail of detailScreensForRole(role)) {
-        // `detailScreensForRole` already stripped the employer prefix, so the
-        // declared URL path is rebuilt from the role to find the file.
-        const path = role === 'employer' ? `/employer/${detail.name}` : `/${detail.name}`;
-        const file = fileForPath(path);
-        expect(file, `${path} has no screen file`).not.toBeNull();
+      // The declared path is the source of truth; `detailScreensForRole` only
+      // renames it for `<Tabs.Screen>`, so the URL is read from the inventory
+      // rather than rebuilt from a screen name (rebuilding it re-introduced the
+      // double `employer/employer/` prefix the router cannot resolve).
+      for (const route of detailRoutesForRole(role)) {
+        const file = fileForPath(route.path);
+        expect(file, `${route.path} has no screen file`).not.toBeNull();
 
         const source = readFileSync(file as string, 'utf8');
         const viaSharedShell = SHARED_SHELLS.some((shell) => source.includes(shell));
@@ -287,7 +324,7 @@ describe('detail route back navigation', () => {
 
         expect(
           hasBackControl,
-          `${path} is a detail route with no header and no back control`,
+          `${route.path} is a detail route with no header and no back control`,
         ).toBe(true);
       }
     });

@@ -173,14 +173,23 @@ export interface DetailScreen {
 /**
  * The expo-router screen name for a declared URL path.
  *
- * expo-router strips a route-group directory from the URL, but the employer tree
- * also keeps a literal `employer/` segment so its routes stay namespaced. So
- * `/profile/skills` is the screen `profile/skills` inside `(candidate)`, while
- * `/employer/settings` is the screen `settings` inside `(employer)`.
+ * expo-router strips a route-group directory from the URL, so the screen name a
+ * `<Tabs.Screen name=...>` needs is simply the declared path minus its leading
+ * slash — measured from the group layout, not from the URL root. The employer
+ * tree keeps a literal `employer/` segment on disk (`app/(employer)/employer/…`)
+ * so its routes stay namespaced, and that segment *is* part of the route name:
+ *
+ *   `/profile/skills`     -> the screen `profile/skills` in `(candidate)`
+ *   `/employer/settings`  -> the screen `employer/settings` in `(employer)`
+ *
+ * This takes no role argument on purpose: both shells resolve names the same way,
+ * and the role is already carried by the path. Stripping the `employer` prefix
+ * here (as this function used to) named a route that does not exist, so the
+ * employer shell declared screens the navigator could not find and every
+ * `/employer/*` push resolved to "Unmatched Route".
  */
-export function screenNameForPath(path: string, role: 'candidate' | 'employer'): string {
-  const relative = role === 'employer' ? path.replace(/^\/employer/, '') : path;
-  return relative.replace(/^\//, '');
+export function screenNameForPath(path: string): string {
+  return path.replace(/^\//, '');
 }
 
 /**
@@ -194,7 +203,7 @@ export function screenNameForPath(path: string, role: 'candidate' | 'employer'):
  */
 export function detailScreensForRole(role: 'candidate' | 'employer'): readonly DetailScreen[] {
   return detailRoutesForRole(role).map((route) => ({
-    name: screenNameForPath(route.path, role),
+    name: screenNameForPath(route.path),
     title: route.title,
     implemented: route.implemented,
   }));

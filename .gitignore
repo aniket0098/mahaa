@@ -31,6 +31,50 @@ dist-*/
 # Metro
 .metro-health-check*
 
+# Device/UI verification artifacts written by tools/ui.ps1 (uiautomator dumps,
+# screenshots, token/result scratch files). Every pattern is root-anchored on
+# purpose: a bare `*.xml` or `*.png` would also match AndroidManifest.xml, the
+# res/ drawables, and everything under assets/. Give a capture the `_` prefix
+# (e.g. _shot1.png) and it lands here instead of in `git status`.
+/_*.xml
+/_*.png
+/_*.txt
+/_*.json
+/.shot-*.png
+
+# Dev-server / run logs from the local Expo and native build commands
+/.metro*.log
+/.run-android*.log
+
+# Local Gradle and IDE state
+/.gradle/
+/.idea/
+/build/
+
+# JVM crash logs and JIT replay files. The Gradle daemon writes these into the
+# project root when it dies (e.g. "insufficient memory for the Java Runtime
+# Environment"), and they are several MB each.
+/hs_err_pid*.log
+/replay_pid*.log
+
+# Stray Android Studio project sitting in the repo root. It is a standalone
+# Jetpack Compose app, not this one: its applicationId is com.example.mahaa
+# while app.json declares android.package "com.mahajob.mobile", it has no
+# react-native or expo dependency, and it carries Android Studio wizard assets
+# (BakingScreen.kt, baked_goods_*.jpg). It is unrelated to the Expo app, whose
+# native project belongs under /android. It also holds a live Firebase config
+# (app/google-services.json) and a machine-specific local.properties, so it must
+# stay out of the index. These patterns are root-anchored so they cannot reach
+# the real route tree in src/app/.
+/app/
+/build.gradle.kts
+/settings.gradle.kts
+/gradlew
+/gradlew.bat
+/gradle/
+/gradle.properties
+/local.properties
+
 # debug
 npm-debug.*
 yarn-debug.*
