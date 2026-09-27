@@ -1,0 +1,25 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    // Explicit: the Node test files read the route directory off disk, and
+    // `node:*` module declarations only resolve when the types are named here.
+    // `react` is listed too because `jsx: react-jsx` needs its global JSX
+    // namespace; naming both keeps the set explicit rather than accidental.
+    "types": ["node", "react"],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}

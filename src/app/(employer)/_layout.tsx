@@ -1,0 +1,83 @@
+/**
+ * Employer shell — the authenticated tab navigator for employers.
+ *
+ * Structurally identical to the candidate shell but a separate tree, so the two
+ * tab sets can never be mixed on one bar. Routes are namespaced under
+ * `/employer/*` for the same reason: a stale deep link into the candidate tree
+ * is a wrong-role redirect, not a half-rendered employer screen.
+ */
+
+import { Redirect, Tabs } from 'expo-router';
+import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { AppIcon } from '@/components/ui/AppIcon';
+import { useRoleGuard } from '@/auth/RoleGuard';
+import { EMPLOYER_TABS, detailScreensForRole } from '@/config/navConfig';
+import { colors, layout, typography } from '@/theme/tokens';
+
+const TAB_BAR_PADDING_TOP = 6;
+
+export default function EmployerLayout() {
+  const guard = useRoleGuard({ allow: 'employer' });
+  const insets = useSafeAreaInsets();
+
+  if (guard.kind === 'loading') return null;
+  if (guard.kind === 'unauthenticated') return <Redirect href={guard.redirect} />;
+  if (guard.kind === 'wrong-role') return <Redirect href={guard.redirect} />;
+
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.colorPrimary,
+        tabBarInactiveTintColor: colors.colorTextTertiary,
+        tabBarStyle: [styles.tabBar, { height: layout.bottomNavHeight + insets.bottom }],
+        tabBarLabelStyle: styles.tabLabel,
+        sceneStyle: { backgroundColor: colors.colorBgPage },
+      }}>
+      {EMPLOYER_TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.label,
+            tabBarAccessibilityLabel: tab.label,
+            tabBarIcon: ({ color }) => (
+              <AppIcon
+                name={tab.icon}
+                size={24}
+                color={typeof color === 'string' ? color : colors.colorTextSecondary}
+              />
+            ),
+          }}
+        />
+      ))}
+
+      {/*
+        expo-router injects EVERY route it discovers under a `Tabs` layout into
+        the tab navigator, and `href: null` is the only way to keep one out of
+        the bar. Declared implicitly, the six detail screens below (jobs/new,
+        jobs/[id], applicants/[id], messages, notifications, and settings) would
+        each add a tab item and the bar would carry eleven entries instead of the
+        documented five. They stay navigable — `href: null` hides the button, it
+        does not unregister the route.
+      */}
+      {detailScreensForRole('employer').map((route) => (
+        <Tabs.Screen key={`detail:${route.name}`} name={route.name} options={{ href: null }} />
+      ))}
+    </Tabs>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: colors.colorBgSurface,
+    borderTopColor: colors.colorBorder,
+    paddingTop: TAB_BAR_PADDING_TOP,
+  },
+  tabLabel: {
+    fontSize: typography.fontSizeCaption,
+    fontWeight: typography.fontWeightSemibold,
+  },
+});
