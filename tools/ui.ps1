@@ -1,5 +1,5 @@
 # Helper: drive the MahaJob app on the running emulator.
-# Usage: pwsh -File c:\mahaa\tools\ui.ps1 -Action <action> [-Arg <text>] [-X n] [-Y n] [-Index n] [-Out <file>]
+# Usage: pwsh -File c:\mahaa\tools\ui.ps1 -Action <action> [-Arg <text>] [-X n] [-Y n] [-Index n] [-Out <file>] [-Device <serial>]
 #
 #   dump      full hierarchy, with each node's class, label and bounds
 #   dumptext  just the visible labels, in reading order
@@ -20,10 +20,29 @@ param(
   [int]$Y = 0,
   # taptext: which match to use when a label appears more than once (0 = first).
   [int]$Index = 0,
-  [string]$Out = 'c:\mahaa\_out'
+  [string]$Out = 'c:\mahaa\_out',
+  # Target serial, e.g. emulator-5554. Leave empty to auto-select: the only
+  # attached device, or the first emulator if a physical device is also present.
+  [string]$Device = ''
 )
 
 $env:PATH = "$env:LOCALAPPDATA\Android\Sdk\platform-tools;$env:PATH"
+
+# Pin the target device before any adb call. adb aborts with
+# "more than one device/emulator" as soon as two devices are attached, which is
+# the normal state here (a physical phone plus the emulator) and made every
+# action in this script fail. ANDROID_SERIAL disambiguates without having to
+# thread a -s argument through every adb invocation below.
+if (-not $Device) {
+  $online = @(adb devices | Select-String '\sdevice$' | ForEach-Object {
+    ($_ -split '\s+')[0]
+  })
+  if ($online.Count -eq 0) { throw 'ui.ps1: no device or emulator is attached (adb devices is empty)' }
+  # Prefer the emulator: it is where the dev build and the Metro tunnel live.
+  $emu = @($online | Where-Object { $_ -like 'emulator-*' })
+  $Device = if ($emu.Count -gt 0) { $emu[0] } else { $online[0] }
+}
+$env:ANDROID_SERIAL = $Device
 
 switch ($Action) {
   'dump' {
