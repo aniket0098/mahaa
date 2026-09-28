@@ -45,7 +45,18 @@ describe('resolveApiBaseUrl', () => {
   });
 
   it('fails fast on a malformed URL instead of issuing broken requests', () => {
-    expect(() => resolveApiBaseUrl('not-a-url', 'ios')).toThrow(/Invalid EXPO_PUBLIC_API_BASE_URL/);
+    expect(() => resolveApiBaseUrl('not-a-url', 'ios')).toThrow(
+      /Invalid EXPO_PUBLIC_API_BASE_URL: not-a-url/,
+    );
+  });
+
+  it('names the variable that actually supplied the bad value', () => {
+    // With three inputs, a fixed name would send the reader to edit the wrong line
+    // of `.env`. The web override is the one at fault here, so that is what the
+    // message has to say.
+    expect(() => resolveApiBaseUrl(undefined, 'web', false, 'not-a-url')).toThrow(
+      /Invalid EXPO_PUBLIC_API_BASE_URL_WEB: not-a-url/,
+    );
   });
 
   it('rejects a non-http scheme', () => {
@@ -107,6 +118,155 @@ describe('resolveApiBaseUrl — device configuration', () => {
   it('flags an iOS device that fell back to loopback', () => {
     const resolved = resolveApiBaseUrl(undefined, 'ios', true);
     expect(resolved.hostKind).toBe('loopback');
+    expect(resolved.needsDeviceConfiguration).toBe(true);
+  });
+});
+
+describe('resolveApiBaseUrl — platform override (web vs Android)', () => {
+  const SHARED = 'http://10.0.2.2:8000/api/v1';
+  const WEB = 'http://localhost:8000/api/v1';
+
+  it('uses the browser loopback on web, overriding the shared emulator alias', () => {
+    // This is the reported bug: one shared value left the browser calling
+    // 10.0.2.2, which is unroutable from a desktop, so every request timed out.
+    const resolved = resolveApiBaseUrl(SHARED, 'web', false, WEB);
+    expect(resolved.baseUrl).toBe(WEB);
+    expect(resolved.source).toBe('platform-override');
+    expect(resolved.hostKind).toBe('loopback');
+  });
+
+  it('keeps the Android emulator alias when the web value is also present', () => {
+    // The override is web-only by construction — `env.ts` passes `undefined`
+    // for every other platform — so Android must be untouched.
+    const resolved = resolveApiBaseUrl(SHARED, 'android', false, WEB);
+    expect(resolved.baseUrl).toBe(SHARED);
+    expect(resolved.source).toBe('configured');
+    expect(resolved.hostKind).toBe('emulator');
+  });
+
+  it('keeps the iOS simulator on the shared value, ignoring the web override', () => {
+    // The iOS simulator already shares the host loopback, so it must not be
+    // redirected by a variable named for the browser.
+    const resolved = resolveApiBaseUrl(WEB, 'ios', false, WEB);
+    expect(resolved.baseUrl).toBe(WEB);
+    expect(resolved.source).toBe('configured');
+  });
+
+  it('ignores the override entirely on non-web platforms', () => {
+    // Defence in depth: even if a caller passes the argument unconditionally,
+    // Android keeps the emulator alias. This is what stops the web fix from
+    // ever repointing a device build at a loopback it cannot reach.
+    expect(resolveApiBaseUrl(SHARED, 'android', false, WEB).baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(SHARED, 'ios', false, 'http://192.168.56.1:8000/api/v1').baseUrl).toBe(
+      SHARED,
+    );
+  });
+
+  it('falls back to the shared value when the override is empty or whitespace', () => {
+    expect(resolveApiBaseUrl(SHARED, 'web', false, '').baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(SHARED, 'web', false, '   ').baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(SHARED, 'web', false, '   ').source).toBe('configured');
+  });
+
+  it('works with no override at all, preserving the documented defaults', () => {
+    expect(resolveApiBaseUrl(SHARED, 'web').baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(undefined, 'android').baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(undefined, 'web').baseUrl).toBe(WEB);
+  });
+
+  it('trims the override and strips its trailing slash like any other value', () => {
+    const resolved = resolveApiBaseUrl(SHARED, 'web', false, '  http://localhost:8000/api/v1/  ');
+    expect(resolved.baseUrl).toBe(WEB);
+  });
+
+  it('rejects a malformed override instead of silently ignoring it', () => {
+    expect(() => resolveApiBaseUrl(SHARED, 'web', false, 'not-a-url')).toThrow(
+      /Invalid EXPO_PUBLIC_API_BASE_URL/,
+    );
+  });
+
+  it('never flags a device-configuration fault for an explicit override', () => {
+    // An explicit value is a choice the developer made, on any platform.
+    const resolved = resolveApiBaseUrl(SHARED, 'web', true, WEB);
+    expect(resolved.needsDeviceConfiguration).toBe(false);
+  });
+});
+
+describe('resolveApiBaseUrl — LAN override (physical Android)', () => {
+  const SHARED = 'http://10.0.2.2:8000/api/v1';
+  const LAN = 'http://10.236.127.87:8000/api/v1';
+
+  it('prefers the LAN address on a physical device', () => {
+    // The failure this exists to fix: a phone on the same Wi-Fi resolving the
+    // shared emulator alias and reporting "Network request failed".
+    const resolved = resolveApiBaseUrl(SHARED, 'android', true, undefined, LAN);
+    expect(resolved.baseUrl).toBe(LAN);
+    expect(resolved.source).toBe('lan-override');
+    expect(resolved.hostKind).toBe('lan');
+  });
+
+  it('clears the device-configuration fault when a LAN address is present', () => {
+    // Nothing is wrong with the setup any more, so the app must stop reporting a
+    // misconfiguration it can now resolve by itself.
+    const resolved = resolveApiBaseUrl(undefined, 'android', true, undefined, LAN);
+    expect(resolved.needsDeviceConfiguration).toBe(false);
+  });
+
+  it('ignores the LAN value on an emulator, keeping 10.0.2.2', () => {
+    // The emulator reaches the host through its own alias; a LAN address there
+    // would be a second, slower way to say the same thing.
+    const resolved = resolveApiBaseUrl(SHARED, 'android', false, undefined, LAN);
+    expect(resolved.baseUrl).toBe(SHARED);
+    expect(resolved.source).toBe('configured');
+  });
+
+  it('ignores the LAN value on web and iOS', () => {
+    // Scoped by construction, exactly like the web override: a LAN address is
+    // meaningless to a browser on this machine, which has loopback.
+    expect(resolveApiBaseUrl(SHARED, 'web', true, undefined, LAN).baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(SHARED, 'ios', true, undefined, LAN).baseUrl).toBe(SHARED);
+  });
+
+  it('refuses a LAN value that is itself a loopback or emulator alias', () => {
+    // The variable exists to prevent a phone using an unreachable host. If it
+    // were set to one, honouring it would reintroduce the exact bug and report
+    // success — so it is ignored and the shared value stands.
+    const loopback = resolveApiBaseUrl(
+      SHARED,
+      'android',
+      true,
+      undefined,
+      'http://localhost:8000/api/v1',
+    );
+    expect(loopback.baseUrl).toBe(SHARED);
+    expect(loopback.source).toBe('configured');
+
+    const alias = resolveApiBaseUrl(
+      SHARED,
+      'android',
+      true,
+      undefined,
+      'http://10.0.2.2:8000/api/v1',
+    );
+    expect(alias.baseUrl).toBe(SHARED);
+    expect(alias.source).toBe('configured');
+  });
+
+  it('falls back to the shared value when the LAN value is empty or malformed', () => {
+    expect(resolveApiBaseUrl(SHARED, 'android', true, undefined, '').baseUrl).toBe(SHARED);
+    expect(resolveApiBaseUrl(SHARED, 'android', true, undefined, '   ').baseUrl).toBe(SHARED);
+    // A non-IP host is not a LAN address either, so it is ignored rather than
+    // accepted on the strength of looking like a URL.
+    expect(
+      resolveApiBaseUrl(SHARED, 'android', true, undefined, 'http://not-an-ip:8000/api/v1').baseUrl,
+    ).toBe(SHARED);
+  });
+
+  it('still reports a device fault when no LAN address is configured', () => {
+    // With nothing to fall back on, the phone keeps the unreachable alias and the
+    // app says so instead of pretending the request was worth making.
+    const resolved = resolveApiBaseUrl(undefined, 'android', true, undefined, '');
+    expect(resolved.source).toBe('platform-default');
     expect(resolved.needsDeviceConfiguration).toBe(true);
   });
 });

@@ -30,6 +30,8 @@ export interface TabDefinition {
   path: string;
   label: string;
   icon: { ios: string; android: string };
+  /** Optional outlined icon used for the inactive state in polished tab bars. */
+  iconOutline?: { ios: string; android: string };
   /** `true` when the tab is backed by a real API response today. */
   implemented: boolean;
 }
@@ -40,6 +42,7 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
     path: '/home',
     label: 'Home',
     icon: { ios: 'house.fill', android: 'home' },
+    iconOutline: { ios: 'house', android: 'home' },
     implemented: true,
   },
   {
@@ -47,20 +50,23 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
     path: '/jobs',
     label: 'Jobs',
     icon: { ios: 'briefcase.fill', android: 'work' },
+    iconOutline: { ios: 'briefcase', android: 'work_outline' },
     implemented: false,
   },
   {
-    name: 'applications',
-    path: '/applications',
-    label: 'Applied',
-    icon: { ios: 'doc.text.fill', android: 'description' },
+    name: 'messages',
+    path: '/messages',
+    label: 'Messages',
+    icon: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat' },
+    iconOutline: { ios: 'bubble.left.and.bubble.right', android: 'chat_bubble_outline' },
     implemented: false,
   },
   {
-    name: 'saved',
-    path: '/saved',
-    label: 'Saved',
-    icon: { ios: 'bookmark.fill', android: 'bookmark' },
+    name: 'learn',
+    path: '/learn',
+    label: 'Learn',
+    icon: { ios: 'book.fill', android: 'school' },
+    iconOutline: { ios: 'book', android: 'school' },
     implemented: false,
   },
   {
@@ -68,6 +74,7 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
     path: '/profile',
     label: 'Profile',
     icon: { ios: 'person.crop.circle.fill', android: 'person' },
+    iconOutline: { ios: 'person.crop.circle', android: 'person_outline' },
     implemented: true,
   },
 ];
@@ -111,6 +118,48 @@ export const EMPLOYER_TABS: readonly TabDefinition[] = [
 ];
 
 /**
+ * College tabs. A third tree, for the same reason the other two are separate: a
+ * college is neither a candidate nor an employer, and its workspace is organised
+ * around institutions and programs rather than jobs. Namespaced under
+ * `/college/*` so a stale link into the candidate tree is a wrong-role bounce
+ * rather than a half-rendered screen.
+ */
+export const COLLEGE_TABS: readonly TabDefinition[] = [
+  {
+    name: 'college/home',
+    path: '/college/home',
+    label: 'Dashboard',
+    icon: { ios: 'chart.bar.fill', android: 'dashboard' },
+    implemented: true,
+  },
+  {
+    name: 'college/institution',
+    path: '/college/institution',
+    label: 'Institution',
+    icon: { ios: 'building.2.fill', android: 'business' },
+    implemented: true,
+  },
+  {
+    name: 'college/programs',
+    path: '/college/programs',
+    label: 'Programs',
+    icon: { ios: 'list.bullet.rectangle.fill', android: 'list' },
+    implemented: true,
+  },
+  {
+    name: 'college/more',
+    path: '/college/more',
+    label: 'More',
+    icon: { ios: 'ellipsis.circle.fill', android: 'more_horiz' },
+    implemented: true,
+  },
+];
+
+export const COLLEGE_DETAIL_ROUTES: readonly DetailRoute[] = [
+  { path: '/college/settings', title: 'Settings', implemented: true },
+];
+
+/**
  * Secondary (non-tab) routes per role. These are reached from within a tab —
  * a job detail, an applicant detail, a section editor — and deliberately carry
  * no tab bar, so they can never widen the visible navigation.
@@ -122,11 +171,21 @@ export interface DetailRoute {
 }
 
 export const CANDIDATE_DETAIL_ROUTES: readonly DetailRoute[] = [
-  { path: '/jobs/[id]', title: 'Job details', implemented: false },
+  { path: '/jobs/[id]', title: 'Job details', implemented: true },
+  { path: '/story/[id]', title: 'Story', implemented: true },
+  { path: '/applications', title: 'Applications', implemented: false },
+  { path: '/community', title: 'Community', implemented: false },
+  { path: '/saved', title: 'Saved', implemented: false },
+  { path: '/add-post', title: 'Add post', implemented: true },
+  { path: '/innovation-lab', title: 'Innovation Lab', implemented: false },
   { path: '/profile/skills', title: 'Skills', implemented: true },
   { path: '/profile/education', title: 'Education', implemented: true },
   { path: '/profile/experience', title: 'Experience', implemented: true },
   { path: '/profile/projects', title: 'Projects', implemented: true },
+  { path: '/profile/certifications', title: 'Certificates', implemented: true },
+  { path: '/profile/achievements', title: 'Achievements', implemented: true },
+  { path: '/profile/preferences', title: 'Career preferences', implemented: true },
+  { path: '/profile/edit', title: 'Edit profile', implemented: true },
   { path: '/notifications', title: 'Notifications', implemented: false },
   { path: '/settings', title: 'Settings', implemented: true },
 ];
@@ -147,16 +206,30 @@ export const PUBLIC_ROUTES: readonly string[] = [
   '/signup',
   '/reset-password',
   '/boot',
+  /**
+   * The wizard lives in the root stack, outside every role tree. That placement is
+   * what makes it escapable: a role layout can redirect *out* to `/onboarding`, but
+   * the onboarding screen is not itself behind a role layout, so it cannot be
+   * redirected back into the tree it just bounced somebody out of. Putting it
+   * inside a role group would guarantee a redirect loop.
+   */
+  '/onboarding',
+  '/onboarding-complete',
 ];
 
-export function tabsForRole(role: 'candidate' | 'employer'): readonly TabDefinition[] {
-  return role === 'candidate' ? CANDIDATE_TABS : EMPLOYER_TABS;
+/** The roles that have their own authenticated tree. */
+export type AppRole = 'candidate' | 'employer' | 'college';
+
+export function tabsForRole(role: AppRole): readonly TabDefinition[] {
+  if (role === 'candidate') return CANDIDATE_TABS;
+  if (role === 'college') return COLLEGE_TABS;
+  return EMPLOYER_TABS;
 }
 
-export function detailRoutesForRole(
-  role: 'candidate' | 'employer',
-): readonly DetailRoute[] {
-  return role === 'candidate' ? CANDIDATE_DETAIL_ROUTES : EMPLOYER_DETAIL_ROUTES;
+export function detailRoutesForRole(role: AppRole): readonly DetailRoute[] {
+  if (role === 'candidate') return CANDIDATE_DETAIL_ROUTES;
+  if (role === 'college') return COLLEGE_DETAIL_ROUTES;
+  return EMPLOYER_DETAIL_ROUTES;
 }
 
 /** A detail route expressed the way expo-router names the screen behind it. */
@@ -201,7 +274,7 @@ export function screenNameForPath(path: string): string {
  * implicit, the seven candidate detail screens would each add a tab-bar item and
  * the bar would carry twelve entries instead of the documented five.
  */
-export function detailScreensForRole(role: 'candidate' | 'employer'): readonly DetailScreen[] {
+export function detailScreensForRole(role: AppRole): readonly DetailScreen[] {
   return detailRoutesForRole(role).map((route) => ({
     name: screenNameForPath(route.path),
     title: route.title,
@@ -214,5 +287,5 @@ export function detailScreensForRole(role: 'candidate' | 'employer'): readonly D
  * declare routes they do not show (see `routeTree.test.ts`).
  */
 export const APP_TAB_NAMES: readonly string[] = [
-  ...new Set([...CANDIDATE_TABS, ...EMPLOYER_TABS].map((tab) => tab.name)),
+  ...new Set([...CANDIDATE_TABS, ...EMPLOYER_TABS, ...COLLEGE_TABS].map((tab) => tab.name)),
 ];

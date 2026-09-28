@@ -22,18 +22,24 @@ export function hintForBaseUrl(baseUrl: string, context: HintContext = {}): stri
   if (context.needsDeviceConfiguration) {
     return (
       `This build is on a physical phone, but it is using ${baseUrl}, which only exists ` +
-      'inside an Android emulator. Set EXPO_PUBLIC_API_BASE_URL in apps/mobile-rn/.env to ' +
-      "this computer's LAN address (for example http://192.168.56.1:8000/api/v1), then " +
-      'restart the dev server with "npm run start:clear" so the new value is inlined into ' +
-      'the bundle. Chrome reaching the API proves the network is fine — the app is pointed ' +
+      'inside an Android emulator. Set EXPO_PUBLIC_API_BASE_URL_LAN in .env to ' +
+      "this computer's LAN address (find it with `ipconfig`; it looks like " +
+      'http://192.168.1.5:8000/api/v1), then restart the dev server with ' +
+      '"npm run start:clear" so the new value is inlined into the bundle. ' +
+      'Chrome reaching the API proves the network is fine — the app is pointed ' +
       'somewhere else.'
     );
   }
   if (baseUrl.includes('10.0.2.2')) {
-    return "This is the Android emulator address. On a physical phone, set EXPO_PUBLIC_API_BASE_URL in apps/mobile-rn/.env to your computer's LAN address (for example http://192.168.56.1:8000/api/v1) and restart the dev server.";
+    // Deliberately *not* the cache-clearing restart: this branch means somebody
+    // typed this value themselves, so the fix is simply to correct it. The
+    // "restart the dev server" advice is reserved for the branch above, where the
+    // value was a silent fallback the user never chose and therefore cannot
+    // diagnose on their own.
+    return "This is the Android emulator address. On a physical phone, set EXPO_PUBLIC_API_BASE_URL_LAN in .env to your computer's LAN address (find it with `ipconfig`; it looks like http://192.168.1.5:8000/api/v1).";
   }
   if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
-    return "A phone cannot reach \"localhost\" — that means the phone itself. Set EXPO_PUBLIC_API_BASE_URL in apps/mobile-rn/.env to your computer's LAN address and restart the dev server.";
+    return 'A phone cannot reach "localhost" — that means the phone itself. Set EXPO_PUBLIC_API_BASE_URL_LAN in .env to your computer\'s LAN address.';
   }
   if (baseUrl.startsWith('http://')) {
     return 'Android blocks plain http:// in a standalone build. Expo Go normally allows it, so check the phone and this computer are on the same Wi-Fi; if the URL is right and it still fails, you need a development build with usesCleartextTraffic enabled.';

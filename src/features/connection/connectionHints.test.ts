@@ -40,7 +40,10 @@ describe('hintForBaseUrl — silent emulator fallback on a real phone', () => {
       needsDeviceConfiguration: true,
     });
     expect(hint).toContain('EXPO_PUBLIC_API_BASE_URL');
-    expect(hint).toContain('192.168.56.1');
+    // The LAN variable is the one a phone actually needs, and it must be named as
+    // such: the shared variable is what already resolves to 10.0.2.2, so telling
+    // the user to edit it would leave the phone exactly where it started.
+    expect(hint).toContain('EXPO_PUBLIC_API_BASE_URL_LAN');
     expect(hint).toContain('npm run start:clear');
   });
 

@@ -12,6 +12,7 @@
 
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { ApiError, fieldErrors } from '@/api/errors';
@@ -23,12 +24,13 @@ import { Screen } from '@/components/ui/Screen';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { TextField } from '@/components/ui/TextField';
 import { useAuth } from '@/auth/AuthContext';
-import { homePathForRole } from '@/auth/roleHome';
+import { resolveEntryPath } from '@/auth/entryPath';
 import { evaluatePassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '@/lib/passwordRules';
 import { spacing } from '@/theme/tokens';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { signup } = useAuth();
 
   const [role, setRole] = useState<SignupRole>('candidate');
@@ -70,8 +72,13 @@ export default function SignupScreen() {
         role,
       });
       // The server-issued role decides the destination, not the one selected on
-      // this form, so the app can never drop someone into the wrong tree.
-      router.replace(homePathForRole(principal.role) as never);
+      // this form, so the app can never drop someone into the wrong tree — and
+      // the server's onboarding state decides whether they see the wizard first.
+      // A new account is never signed in as "already set up": `entryPathForRole`
+      // sends anyone whose required steps are outstanding to `/onboarding`, which
+      // is what stops a half-finished profile reaching the dashboard.
+      const destination = await resolveEntryPath(queryClient, principal.role);
+      router.replace(destination as never);
     } catch (cause) {
       setError(
         cause instanceof ApiError

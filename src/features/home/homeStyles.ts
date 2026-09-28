@@ -25,7 +25,6 @@ import { colors, elevation, radius, spacing, typography } from '@/theme/tokens';
 
 /** Section rhythm: `.section` gap plus a little more air between sections. */
 export const SECTION_GAP = spacing.xxl; // --space-2xl (32)
-export const CARD_PADDING = spacing.cardPadding; // 16
 
 /** Story bubble: 68px on desktop, 66px under 1024px — this surface. */
 export const STORY_CIRCLE = 66;
@@ -51,6 +50,34 @@ export const styles = StyleSheet.create({
   /** Shared empty-state body: icon, title, explanation, then the real action. */
   emptyState: { alignItems: 'flex-start', gap: spacing.sm },
 
+  /* ------------------------- create-post entry ------------------------- */
+  /**
+   * First circle in the stories row. 68px to match the story bubbles, blue
+   * fill with a white plus, and a white-border ring that reads as distinct
+   * without leaving the blue-and-white scheme. The label slot mirrors the
+   * story bubbles so every item in the row shares one baseline.
+   */
+  createContainer: { alignItems: 'center', width: STORY_ITEM_WIDTH },
+  createCircle: {
+    alignItems: 'center',
+    backgroundColor: colors.colorPrimary,
+    borderColor: colors.colorBgSurface,
+    borderRadius: STORY_CIRCLE / 2,
+    borderWidth: 2,
+    height: STORY_CIRCLE,
+    justifyContent: 'center',
+    width: STORY_CIRCLE,
+    ...elevation.sm,
+  },
+  createLabel: {
+    color: colors.colorTextPrimary,
+    fontSize: typography.fontSizeCaption,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    width: '100%',
+  },
+  createSlot: { alignItems: 'center', height: 14, marginTop: 2 },
+
   /* ------------------------------ header chrome ------------------------------ */
   header: {
     backgroundColor: colors.colorBgSurface,
@@ -64,30 +91,88 @@ export const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.pagePadding,
   },
+  /**
+   * One row: logo, search, bell, avatar. `gap: sm` and no `justifyContent`
+   * space-between, because the search field is the only element allowed to
+   * grow (`flex: 1`) and the other three are fixed-size touch targets. That
+   * keeps the row from spreading out on a tablet and from clipping on a 360pt
+   * phone.
+   */
   headerRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  headerBrand: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
-  brandName: {
-    fontSize: typography.fontSizeH3,
-    fontWeight: typography.fontWeightBold,
-    lineHeight: typography.lineHeightH3,
-  },
-  searchField: {
+  /**
+   * Sidebar menu toggle. A circular muted button with the same primary touch
+   * target as the bell and avatar, so the four-element row stays aligned on
+   * narrow screens and web.
+   */
+  menuToggle: {
     alignItems: 'center',
-    backgroundColor: colors.colorBgSurface,
-    borderColor: colors.colorBorder,
-    borderRadius: 11,
-    borderWidth: 1,
+    backgroundColor: colors.colorBgMuted,
+    borderRadius: radius.full,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 44,
+  },
+  /**
+   * Collapsed search. A muted pill with the icon and the placeholder, sized to
+   * the 44px inline-secondary touch target, and shrinking before anything else
+   * does because it is the only flexible child of the row.
+   */
+  searchTrigger: {
+    alignItems: 'center',
+    backgroundColor: colors.colorBgMuted,
+    borderRadius: radius.full,
+    flex: 1,
     flexDirection: 'row',
     gap: spacing.sm,
-    // 42px on mobile (navSearch.module.css max-width: 1023px), trimmed from the
-    // 44px desktop value so the two-row header stays compact.
-    minHeight: 42,
+    minHeight: 40,
+    minWidth: 0,
     paddingHorizontal: spacing.md,
+  },
+  searchPlaceholder: { flexShrink: 1, flexGrow: 0, flexBasis: 'auto' },
+  /** Bell and avatar: 44px targets with no chrome of their own. */
+  headerAction: {
+    alignItems: 'center',
+    borderRadius: radius.full,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 44,
+  },
+  /** The subtle ring that separates the avatar from the header surface. */
+  avatarRing: {
+    borderColor: colors.colorBorder,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    padding: 2,
+  },
+  /** Expanded search field — replaces the pill in the same row. */
+  searchFieldExpanded: {
+    alignItems: 'center',
+    backgroundColor: colors.colorBgMuted,
+    borderColor: colors.colorPrimary,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 40,
+    minWidth: 0,
+    paddingHorizontal: spacing.md,
+  },
+  searchClear: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  searchCancel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingLeft: spacing.sm,
   },
   searchInput: {
     color: colors.colorTextPrimary,
@@ -118,6 +203,8 @@ export const styles = StyleSheet.create({
 
   /* -------------------------------- stories -------------------------------- */
   storyRow: { flexDirection: 'row', gap: spacing.md }, // --space-md on mobile
+  /** Note under the story row: the demo disclaimer, or the honest empty state. */
+  storiesNote: { paddingTop: spacing.sm },
   storyItem: { alignItems: 'center', gap: spacing.xs, width: STORY_ITEM_WIDTH },
   storyBubble: { alignItems: 'center', gap: spacing.xs },
   storyCircle: {
@@ -164,27 +251,9 @@ export const styles = StyleSheet.create({
     fontWeight: typography.fontWeightSemibold,
     lineHeight: typography.lineHeightCaption,
   },
-  /* -------------------------------- composer -------------------------------- */
-  composer: { gap: spacing.md },
-  composerTop: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
-  trigger: {
-    backgroundColor: colors.colorBgMuted,
-    borderColor: colors.colorBorder,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    color: colors.colorTextTertiary,
-    flex: 1,
-    fontSize: typography.fontSizeBody,
-    minHeight: 40,
-    paddingHorizontal: spacing.md,
-    textAlign: 'left',
-  },
-  composerBottom: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-  },
+  /* The composer card was removed from this page: the stories row's Create (+)
+     button is the only publishing entry point, and it opens the honest
+     `/add-post` notice. The feed has no composer of its own. */
 
   /* ------------------------------ quick actions ------------------------------ */
   quickActions: { gap: spacing.sm },
@@ -223,96 +292,9 @@ export const styles = StyleSheet.create({
     letterSpacing: 0.04,
   },
 
-  /* ---------------------------------- feed ---------------------------------- */
-  feed: { gap: spacing.md },
-  feedHeader: { gap: spacing.xs },
-  feedControls: { gap: spacing.sm, marginTop: spacing.xs },
-  filters: { flexDirection: 'row', gap: spacing.xs },
-  filterButton: {
-    borderColor: colors.colorBorder,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    minHeight: 40,
-    paddingHorizontal: spacing.lg,
-  },
-  filterButtonActive: {
-    backgroundColor: colors.colorPrimarySubtle,
-    borderColor: colors.colorPrimary,
-  },
-  list: { gap: spacing.lg },
-  card: { overflow: 'hidden' },
-  cardTop: { gap: spacing.md, padding: CARD_PADDING },
-  cardBottom: { gap: spacing.sm, padding: CARD_PADDING, paddingTop: 0 },
-  cardHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'space-between',
-  },
-  author: { alignItems: 'flex-start', flex: 1, flexDirection: 'row', gap: spacing.md },
-  authorText: { flex: 1, gap: 2 },
-  manage: {
-    alignItems: 'center',
-    borderRadius: radius.full,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  cardBody: { gap: spacing.sm },
-  cardTitle: {
-    fontSize: typography.fontSizeH3,
-    fontWeight: typography.fontWeightSemibold,
-    lineHeight: typography.lineHeightH3,
-  },
-  recordMeta: {
-    color: colors.colorTextTertiary,
-    fontSize: typography.fontSizeSmall,
-    lineHeight: typography.lineHeightSmall,
-  },
-  cardText: {
-    color: colors.colorTextSecondary,
-    fontSize: typography.fontSizeBody,
-    lineHeight: typography.lineHeightBody,
-  },
-  expand: {
-    color: colors.colorPrimary,
-    fontSize: typography.fontSizeSmall,
-    fontWeight: typography.fontWeightMedium,
-    minHeight: 32,
-  },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  links: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  link: {
-    alignItems: 'center',
-    color: colors.colorPrimary,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 32,
-  },
-  /* ----------------------------- engagement bar ----------------------------- */
-  actions: {
-    alignItems: 'center',
-    borderTopColor: colors.colorBorder,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'space-between',
-    marginTop: spacing.xs,
-    paddingTop: spacing.sm,
-  },
-  actionList: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  actionButton: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 40,
-    paddingHorizontal: spacing.sm,
-  },
-  actionsNote: {
-    color: colors.colorTextDisabled,
-    fontSize: typography.fontSizeCaption,
-    lineHeight: typography.lineHeightCaption,
-  },
+  /* The feed styles live with the feed: see `features/feed/feedStyles.ts`.
+     They were removed from this file when the dashboard's own-records stream and
+     the Community Feed were folded into one section. */
 
   /* ---------------------------- career snapshot ---------------------------- */
   careerGrid: { gap: spacing.lg },

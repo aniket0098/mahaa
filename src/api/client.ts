@@ -57,7 +57,15 @@ class ApiClient {
     return this.request<T>(path, { ...options, method: 'PATCH' });
   }
 
-  delete<T>(path: string, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
+  /**
+   * `body` is accepted deliberately. `DELETE /users/me` takes a payload (the
+   * password plus a typed confirmation phrase), and the contract for that endpoint
+   * is a body — so the transport must be able to carry one. Omitting `body` from
+   * the accepted options made a correct call a compile error, and the obvious
+   * "fix" of moving the confirmations into query parameters would have invented a
+   * route the server does not serve.
+   */
+  delete<T>(path: string, options: Omit<RequestOptions, 'method'> = {}): Promise<T> {
     return this.request<T>(path, { ...options, method: 'DELETE' });
   }
 
@@ -105,7 +113,7 @@ class ApiClient {
         message: env.needsDeviceConfiguration
           ? `Cannot reach ${this.baseUrl}. This build is on a physical phone, and that ` +
             'address only exists inside an Android emulator. Set EXPO_PUBLIC_API_BASE_URL in ' +
-            'apps/mobile-rn/.env to this computer\'s LAN address and restart with ' +
+            '.env to this computer\'s LAN address and restart with ' +
             '"npm run start:clear".'
           : `Network request failed. Check your connection to ${this.baseUrl}.`,
         code: API_ERROR_CODES.network,

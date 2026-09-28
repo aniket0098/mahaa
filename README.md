@@ -21,25 +21,32 @@ placeholder data.
 ## Setup
 
 ```powershell
-Set-Location mobile-rn        # this folder is the app root
+Set-Location C:\mahaa            # the repository root IS the app root
 npm install
-Copy-Item .env.example .env   # optional; .env is already present and gitignored
+Copy-Item .env.example .env      # optional; .env is already present and gitignored
 ```
 
 ## Current backend
 
-`.env` is configured for the deployed API:
+The FastAPI backend runs locally on this machine and is the API these settings point at:
+
+```powershell
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000   # from C:\mahajob\apps\api
+```
 
 ```text
-EXPO_PUBLIC_API_BASE_URL=https://mahajob-api.onrender.com/api/v1
+EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:8000/api/v1        # Android emulator
+EXPO_PUBLIC_API_BASE_URL_WEB=http://localhost:8000/api/v1   # browser
 ```
 
 Verified against that host:
 
 | Endpoint | Result |
 |---|---|
-| `GET /health` | `200` — `{"status":"ok","app":"MahaJob API","version":"0.1.0","environment":"production"}` |
-| `GET /ready` | `200` — `{"status":"ready","checks":{"database":"ok"}}` |
+| `GET /api/v1/health` | `200` — `{"status":"ok","app":"MahaJob API","version":"0.1.0","environment":"development"}` |
+| `OPTIONS /api/v1/auth/login` (CORS preflight) | `200` with `access-control-allow-origin: http://localhost:8081` |
+| `GET /api/v1/ready` | `200` — `{"status":"ready","checks":{"database":"ok"}}` |
+
 | `POST /auth/signup` | **`500` for every valid payload** (see below) |
 | `POST /auth/login` | **`500` for every valid payload** (see below) |
 | `GET /auth/me`, `/profile`, `/profile/completeness`, `/profile/privacy`, `/profile/skills`, `/profile/education`, `/profile/experience`, `/profile/projects`, `/skills/catalog`, `/companies/mine`, `/resumes` | `401` — the routes exist and need a bearer token |
@@ -63,12 +70,55 @@ established by probing the live host.
 The app reads `EXPO_PUBLIC_API_BASE_URL` (a public build-time value only — never put a backend
 secret in a mobile env file).
 
-| Where the app runs | Base URL to use |
-|---|---|
-| Android emulator | `http://10.0.2.2:8000/api/v1` (default) — `localhost` is the emulator itself |
-| iOS simulator | `http://localhost:8000/api/v1` (default) — the simulator shares the host loopback |
-| Physical device | your computer's LAN IP, e.g. `http://192.168.1.5:8000/api/v1` |
-| Deployed build | the real API origin, e.g. `https://mahajob-api.onrender.com/api/v1` |
+| Where the app runs | Base URL to use | Set in |
+|---|---|---|
+| Android emulator | `http://10.0.2.2:8000/api/v1` (default) — `localhost` is the emulator itself | `EXPO_PUBLIC_API_BASE_URL` |
+| Browser (`expo start --web`) | `http://localhost:8000/api/v1` (default) | `EXPO_PUBLIC_API_BASE_URL_WEB` |
+| iOS simulator | `http://localhost:8000/api/v1` (default) — the simulator shares the host loopback | `EXPO_PUBLIC_API_BASE_URL` |
+| Physical Android device | your computer's LAN IP, e.g. `http://10.236.127.87:8000/api/v1` | `EXPO_PUBLIC_API_BASE_URL_LAN` |
+| Deployed build | the real API origin, e.g. `https://mahajob-api.onrender.com/api/v1` | `eas.json` → `production.env` |
+
+### Why there are three variables
+
+Expo loads only `.env`, `.env.local` and `.env.<mode>` — it has **no per-platform env files** — and
+`EXPO_PUBLIC_*` is inlined into the bundle, so a single value is baked into *every* platform's build.
+One value cannot serve all of the targets that run on your own machine:
+
+- the Android emulator reaches it at `10.0.2.2`;
+- a browser reaches it at `localhost`;
+- a **physical phone** reaches it at neither — `localhost` is the phone itself and `10.0.2.2` is the
+  emulator's alias — only at your computer's LAN IP.
+
+So the two settings that would otherwise fight over the shared value are split off by target, and
+each is honoured **only** on the platform it is valid for (`src/lib/env.ts` → `resolveApiBaseUrl` in
+`src/lib/apiBaseUrl.ts`):
+
+- `EXPO_PUBLIC_API_BASE_URL_WEB` — web only. Android and iOS ignore it, so the emulator URL cannot be
+  repointed by a browser-only setting. Leaving the browser on `10.0.2.2` is what made the web login
+  screen at `http://localhost:8081` hang until it timed out: that address is unroutable from a desktop.
+- `EXPO_PUBLIC_API_BASE_URL_LAN` — a **physical Android device** only, and only when the value is a real
+  IPv4 address. A `localhost` or `10.0.2.2` value here is ignored rather than trusted, because
+  honouring it would put the phone right back where it started.
+
+Setting the phone's address in its own variable is what lets you keep the emulator and the phone
+working **at the same time**, instead of editing the shared value and breaking one to fix the other.
+
+### Reaching the API from a physical phone
+
+A correct base URL is only half of it: the backend also has to be listening on the network, and
+Windows Firewall has to allow the connection.
+
+```powershell
+# Backend + Vite, bound to 0.0.0.0 so a phone on the same Wi-Fi can connect.
+C:\mahajob\run-mahajob.bat --lan
+```
+
+Without `--lan` the launcher binds `127.0.0.1`, which is loopback only and cannot be reached from a
+phone. `--lan` is opt-in for that reason. The launcher auto-detects and prints your LAN IPv4 (ignoring
+the WSL/Hyper-V/VirtualBox adapters, which are also in a private range but are not on your Wi-Fi), and
+on success it prints the exact URL to paste into `EXPO_PUBLIC_API_BASE_URL_LAN`.
+
+Then `npm run start:clear`, because `.env` values are inlined and a cached transform keeps the old one.
 
 A malformed value fails fast at startup instead of producing confusing network errors. The Home
 screen shows what `GET /ready` actually answered, so a wrong URL is visible immediately.
@@ -77,9 +127,12 @@ screen shows what `GET /ready` actually answered, so a wrong URL is visible imme
 prints the exact base URL in use and can re-probe `GET /health` on demand, so the failure is
 diagnosable on the device. The app also distinguishes *emulator* from *physical phone* (via
 `expo-device`): if the base URL came from a platform default that cannot exist on real hardware —
-for example the `10.0.2.2` emulator alias — the error names that exact cause instead of a generic
-"Network request failed". Two causes account for nearly all of them:
+for example the `10.0.2.2` emulator alias — the error names that exact cause and the variable to fix
+instead of a generic "Network request failed". The three usual causes:
 
+- **The backend is not running, or is bound to loopback only.** Check
+  `http://127.0.0.1:8000/api/v1/health` first. If that fails on this computer, no target can work — and
+  a phone additionally needs `run-mahajob.bat --lan`, because `127.0.0.1` is not a network address.
 - **A stale Metro cache.** `EXPO_PUBLIC_*` values are inlined into the bundle when a file is
   transformed, and a transformed file stays cached. If you add or change `.env` while the dev
   server has already run once, the old value can stay baked in. **This is not theoretical** — it was

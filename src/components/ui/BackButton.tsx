@@ -27,13 +27,22 @@ import { colors, spacing } from '@/theme/tokens';
 export interface BackButtonProps {
   /** Accessible name and visible text. */
   label?: string;
+  /**
+   * Replaces the default navigation.
+   *
+   * Only for a screen that must do something first — the composer asks whether
+   * to discard an unfinished post before it will leave. The control stays a back
+   * button in every other respect, including the role-aware fallback, which the
+   * composer re-implements by calling `router.back()`/`router.replace()` itself.
+   */
+  onPress?: () => void;
 }
 
-export function BackButton({ label = 'Back' }: BackButtonProps) {
+export function BackButton({ label = 'Back', onPress }: BackButtonProps) {
   const router = useRouter();
   const { principal } = useAuth();
 
-  const onPress = () => {
+  const goBack = () => {
     if (router.canGoBack()) {
       router.back();
       return;
@@ -47,7 +56,7 @@ export function BackButton({ label = 'Back' }: BackButtonProps) {
       accessibilityLabel={label}
       // 44px inline-secondary minimum target; the visible row is padded to it.
       hitSlop={12}
-      onPress={onPress}
+      onPress={onPress ?? goBack}
       style={({ pressed }) => [styles.back, pressed ? styles.pressed : null]}>
       <AppIcon
         name={{ ios: 'chevron.left', android: 'arrow_back' }}

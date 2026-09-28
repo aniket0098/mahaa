@@ -104,6 +104,39 @@ export interface CertificationRead {
   updated_at: string;
 }
 
+/** `app.schemas.profile.CertificationCreate` — `POST /profile/certifications`. */
+export interface CertificationCreate {
+  title: string;
+  issuer: string;
+  issued_on?: string | null;
+  expires_on?: string | null;
+  credential_id?: string | null;
+  verification_url?: string | null;
+}
+
+/** `app.schemas.profile.CertificationUpdate` — `PATCH /profile/certifications/{id}`. */
+export interface CertificationUpdate {
+  title?: string | null;
+  issuer?: string | null;
+  issued_on?: string | null;
+  expires_on?: string | null;
+  credential_id?: string | null;
+  verification_url?: string | null;
+}
+
+/**
+ * `app.schemas.profile.AchievementCategory` — a closed server-side literal, so
+ * it is a union here rather than `string`. `AchievementCreate` requires it, and
+ * `extra="forbid"` means the form must send one of these six and nothing else.
+ */
+export type AchievementCategory =
+  | 'competition'
+  | 'award'
+  | 'academic'
+  | 'hackathon'
+  | 'publication'
+  | 'leadership';
+
 /** `app.schemas.profile.AchievementRead`. */
 export interface AchievementRead {
   id: string;
@@ -114,6 +147,29 @@ export interface AchievementRead {
   description: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * `app.schemas.profile.AchievementCreate` — `POST /profile/achievements`.
+ *
+ * The server's schema is `extra="forbid"` and `category` is required, so this
+ * mirrors it exactly: no `issuer`, which the read model does not carry either
+ * (the `issuer` field on `AchievementRead` is legacy client-side drift and is
+ * never rendered for an achievement).
+ */
+export interface AchievementCreate {
+  title: string;
+  category: AchievementCategory;
+  description?: string | null;
+  achieved_on?: string | null;
+}
+
+/** `app.schemas.profile.AchievementUpdate` — `PATCH /profile/achievements/{id}`. */
+export interface AchievementUpdate {
+  title?: string | null;
+  category?: AchievementCategory | null;
+  description?: string | null;
+  achieved_on?: string | null;
 }
 
 /** `app.schemas.profile.LinkRead`. */

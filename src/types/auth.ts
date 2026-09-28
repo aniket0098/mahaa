@@ -5,7 +5,7 @@
  * and nothing is added for a later stage.
  */
 
-export type UserRole = 'candidate' | 'employer' | 'admin';
+export type UserRole = 'candidate' | 'employer' | 'college' | 'admin';
 
 export interface MembershipSummary {
   company_id: string;
@@ -17,12 +17,26 @@ export interface MembershipSummary {
 /** `GET /auth/me` — the authenticated principal, always derived server-side. */
 export interface Principal {
   id: string;
+  /**
+   * The permanent public identity (`MJ-XXXXXXXX`). Assigned once at signup and
+   * never changed by any endpoint, so the app only ever displays and copies it.
+   */
   public_id: string;
+  /**
+   * The searchable handle, assigned at signup and changeable under password +
+   * cooldown rules. Used for search and sharing, never as a database key.
+   */
+  username: string;
   name: string;
   email: string;
   role: string;
+  /** Recruiter / contact-person title. Optional, so it is nullable. */
+  designation?: string | null;
   memberships: MembershipSummary[];
 }
+
+/** The account types a person can register as. `admin` is never self-registerable. */
+export type SignupRole = 'candidate' | 'employer' | 'college';
 
 /** `POST /auth/login` and `POST /auth/signup`. */
 export interface TokenResponse {
@@ -42,7 +56,7 @@ export interface SignupFormValues {
   email: string;
   password: string;
   phone?: string;
-  role: 'candidate' | 'employer';
+  role: SignupRole;
 }
 
 export interface LoginFormValues {

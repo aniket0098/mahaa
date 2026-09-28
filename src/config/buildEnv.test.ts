@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveApiBaseUrl } from '@/lib/apiBaseUrl';
 
 const EAS_JSON = fileURLToPath(new URL('../../eas.json', import.meta.url));
+const ENV_EXAMPLE = fileURLToPath(new URL('../../.env.example', import.meta.url));
 
 /** The deployed API. Plain text by design: `EXPO_PUBLIC_*` ships in the bundle. */
 const PRODUCTION_API_BASE_URL = 'https://mahajob-api.onrender.com/api/v1';
@@ -35,6 +36,56 @@ function buildProfiles(): Record<string, BuildProfile> {
   };
   return parsed.build ?? {};
 }
+
+/** Read the active assignment for a key, ignoring comments and blank lines. */
+function assignmentFor(contents: string, key: string): string | undefined {
+  for (const line of contents.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) continue;
+    const match = new RegExp(`^${key}\\s*=\\s*(.+)$`).exec(trimmed);
+    if (match) return match[1].trim();
+  }
+  return undefined;
+}
+
+describe('.env.example — per-platform API addresses', () => {
+  // Regression: the shared value alone left the browser calling the Android
+  // emulator alias 10.0.2.2, which is unroutable from a desktop, so the web
+  // login screen at localhost:8081 timed out. The committed template must
+  // therefore document a browser value as well as the Android one.
+  const contents = readFileSync(ENV_EXAMPLE, 'utf8');
+
+  it('keeps the Android emulator alias as the shared value', () => {
+    expect(assignmentFor(contents, 'EXPO_PUBLIC_API_BASE_URL')).toBe(
+      'http://10.0.2.2:8000/api/v1',
+    );
+  });
+
+  it('points the browser at the host loopback, not the emulator alias', () => {
+    expect(assignmentFor(contents, 'EXPO_PUBLIC_API_BASE_URL_WEB')).toBe(
+      'http://localhost:8000/api/v1',
+    );
+  });
+
+  it('resolves each platform to the address that actually works there', () => {
+    const shared = assignmentFor(contents, 'EXPO_PUBLIC_API_BASE_URL');
+    const web = assignmentFor(contents, 'EXPO_PUBLIC_API_BASE_URL_WEB');
+    expect(resolveApiBaseUrl(shared, 'web', false, web).baseUrl).toBe(
+      'http://localhost:8000/api/v1',
+    );
+    expect(resolveApiBaseUrl(shared, 'android', false, web).baseUrl).toBe(
+      'http://10.0.2.2:8000/api/v1',
+    );
+  });
+
+  it('carries no backend secrets — these files are inlined into the bundle', () => {
+    const forbidden = /DATABASE_URL|JWT|SECRET|PASSWORD|TOKEN|PRIVATE_KEY/i;
+    for (const key of ['EXPO_PUBLIC_API_BASE_URL', 'EXPO_PUBLIC_API_BASE_URL_WEB']) {
+      const value = assignmentFor(contents, key) ?? '';
+      expect(value, `${key} must not look like a secret`).not.toMatch(forbidden);
+    }
+  });
+});
 
 describe('eas.json build profiles', () => {
   it('pins the production API base URL for cloud builds', () => {

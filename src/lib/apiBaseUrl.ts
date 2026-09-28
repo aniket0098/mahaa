@@ -5,6 +5,12 @@
  * The value is supplied by `EXPO_PUBLIC_API_BASE_URL` (public build-time
  * configuration only; backend secrets never reach the app — docs/SECURITY.md).
  *
+ * A single variable cannot serve every target: the Android emulator reaches the
+ * developer machine at `10.0.2.2`, while a browser on the same machine reaches
+ * it at `localhost`. Expo has no per-platform env files, so a platform-scoped
+ * variable (`EXPO_PUBLIC_API_BASE_URL_WEB`) overrides the shared one instead of
+ * forcing a choice between targets.
+ *
  * Two rules this module follows deliberately:
  *
  * - **No `new URL()`.** In Node that is the WHATWG parser, but in React Native
@@ -22,8 +28,19 @@
 
 export type PlatformName = 'android' | 'ios' | 'web';
 
-/** Where the effective value came from. */
-export type ApiBaseUrlSource = 'configured' | 'platform-default';
+/**
+ * Where the effective value came from.
+ *
+ * - `platform-override` — the web variable won (web only)
+ * - `lan-override` — the LAN variable won (a physical Android device only)
+ * - `configured` — the shared variable was set
+ * - `platform-default` — nothing was set, so the per-platform default applied
+ */
+export type ApiBaseUrlSource =
+  | 'platform-override'
+  | 'lan-override'
+  | 'configured'
+  | 'platform-default';
 
 /**
  * How the host behaves when the app runs on real hardware.
@@ -43,6 +60,12 @@ export const DEFAULT_API_BASE_URL: Record<PlatformName, string> = {
 const SCHEME = /^([a-zA-Z][a-zA-Z\d+\-.]*):\/\//;
 const HTTP_URL = /^https?:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/i;
 const AUTHORITY = /^https?:\/\/([^/?#\s]+)/i;
+/**
+ * A routable private IPv4 address. Used to accept or refuse a `_LAN` value: a LAN
+ * variable pointing at `localhost` or `10.0.2.2` is not a LAN address, and
+ * honouring it on a phone would reintroduce the exact failure it exists to fix.
+ */
+const LAN_HOST = /^https?:\/\/(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?::\d+)?(?:\/\S*)?$/;
 
 /** Resolves to the developer machine only from inside an Android emulator. */
 const EMULATOR_HOSTS = new Set(['10.0.2.2', '10.0.3.2']);
@@ -83,29 +106,79 @@ export interface ResolvedApiBaseUrl {
 }
 
 /**
- * Validate and normalise the configured base URL.
+ * Resolve the base URL.
  *
- * Fails fast on malformed configuration instead of issuing broken requests —
- * the same guard the web app applies in `apps/web/src/lib/env.ts`.
+ * Four inputs can speak, in a fixed order of precedence, and the order is the
+ * whole design:
+ *
+ * 1. **The platform override** (`_WEB`) — only ever on `web`.
+ * 2. **The LAN address** (`_LAN`) — only ever on a real Android device, because
+ *    that is the one target a single shared value cannot serve: `localhost` is
+ *    the phone itself and `10.0.2.2` is an emulator alias. A phone therefore
+ *    gets the developer's routable address without anybody editing the shared
+ *    variable and breaking the emulator in the process.
+ * 3. **The shared variable** — what the emulator and the web target share.
+ * 4. **The per-platform default** — the last resort, and the only source that can
+ *    produce an address a physical device cannot reach (reported through
+ *    `needsDeviceConfiguration` rather than attempted).
+ *
+ * Every override is scoped to the platform it is valid for, and that scoping is
+ * applied here rather than trusted to the caller. A resolver that accepted the
+ * web or LAN value on any platform would quietly repoint an Android build at the
+ * browser's loopback the next time somebody passed the argument unconditionally.
+ * Ignoring them off their platform makes that impossible by construction.
  *
  * @param raw the inlined `EXPO_PUBLIC_API_BASE_URL`, if any
  * @param platform the platform this bundle is running on
  * @param isPhysicalDevice real hardware, as opposed to a simulator or emulator
+ * @param platformOverride `EXPO_PUBLIC_API_BASE_URL_WEB`; web only
+ * @param lanOverride `EXPO_PUBLIC_API_BASE_URL_LAN`; physical Android only
  */
 export function resolveApiBaseUrl(
   raw: string | undefined,
   platform: PlatformName,
   isPhysicalDevice = false,
+  platformOverride?: string,
+  lanOverride?: string,
 ): ResolvedApiBaseUrl {
+  const override = platformOverride?.trim();
+  const lan = lanOverride?.trim();
+  // Web-only. iOS shares the host loopback already, and Android must keep the
+  // `10.0.2.2` emulator alias, so neither may be redirected here.
+  const hasOverride = platform === 'web' && Boolean(override && override.length > 0);
+  // Android-on-hardware only, and only for a genuine LAN address. A `_LAN` value
+  // that is itself a loopback or emulator alias is refused rather than trusted:
+  // honouring it would reintroduce the exact failure the variable exists to fix.
+  const hasLan =
+    platform === 'android' &&
+    isPhysicalDevice &&
+    Boolean(lan && lan.length > 0) &&
+    LAN_HOST.test(lan as string) &&
+    hostKindFor(lan as string) === 'lan';
+
   const trimmed = raw?.trim();
   const isConfigured = Boolean(trimmed && trimmed.length > 0);
-  const value = isConfigured ? (trimmed as string) : DEFAULT_API_BASE_URL[platform];
+  const value = hasOverride
+    ? (override as string)
+    : hasLan
+      ? (lan as string)
+      : isConfigured
+        ? (trimmed as string)
+        : DEFAULT_API_BASE_URL[platform];
 
   if (!HTTP_URL.test(value)) {
+    // Name the variable that actually supplied the bad value. With three inputs
+    // a fixed name would send the reader to edit the wrong line of `.env` — and
+    // the whole point of failing here is that `.env` is where the fix goes.
+    const variable = hasOverride
+      ? 'EXPO_PUBLIC_API_BASE_URL_WEB'
+      : hasLan
+        ? 'EXPO_PUBLIC_API_BASE_URL_LAN'
+        : 'EXPO_PUBLIC_API_BASE_URL';
     throw new Error(
       SCHEME.test(value)
-        ? `Invalid EXPO_PUBLIC_API_BASE_URL: ${value} (expected an http(s) URL)`
-        : `Invalid EXPO_PUBLIC_API_BASE_URL: ${value}`,
+        ? `Invalid ${variable}: ${value} (expected an http(s) URL)`
+        : `Invalid ${variable}: ${value}`,
     );
   }
 
@@ -114,8 +187,17 @@ export function resolveApiBaseUrl(
 
   return {
     baseUrl,
-    source: isConfigured ? 'configured' : 'platform-default',
+    source: hasOverride
+      ? 'platform-override'
+      : hasLan
+        ? 'lan-override'
+        : isConfigured
+          ? 'configured'
+          : 'platform-default',
     hostKind,
-    needsDeviceConfiguration: !isConfigured && isPhysicalDevice && hostKind !== 'lan',
+    // With a LAN value in hand the app is pointed somewhere a phone can reach, so
+    // this stays false even though `10.0.2.2` would otherwise have been used.
+    needsDeviceConfiguration:
+      !hasOverride && !hasLan && !isConfigured && isPhysicalDevice && hostKind !== 'lan',
   };
 }

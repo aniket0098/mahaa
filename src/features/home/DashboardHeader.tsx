@@ -1,42 +1,52 @@
 /**
- * Dashboard header — the native reproduction of `StudentMobileHeader`.
+ * Dashboard header — the compact student top bar: **one row, four elements.**
  *
- * Two rows, exactly as the web mobile header defines them:
- *   1. brand mark + wordmark on the left, the user's avatar on the right;
- *   2. the search field, which belongs to the chrome rather than the page body
- *      so it stays reachable and the first content section under it is always
- *      the opportunity story row.
+ *   menu toggle  |  search  |  bell  |  avatar
  *
- * What is deliberately **not** here, because the original does not have it:
- *  - **No welcome/greeting message.** The greeting block was removed from the
- *    design so the story row could sit directly under the chrome
- *    (`dashboardHome.module.css` header comment; `docs/PRODUCT_DECISIONS.md`).
- *  - **No notifications control.** The blueprint lists one, but there is no
- *    notifications route, so the original header "ships only what exists"
- *    (see `StudentMobileHeader`'s own comment and PRODUCT_DECISIONS S8). Adding
- *    one here would be inventing a destination.
+ * What this file deliberately does not have, and why:
  *
- * The avatar and the name both come from the real authenticated principal; the
- * search is backed by the real skill catalogue (`GET /skills/catalog`).
+ *  - **No written platform name, and no header logo.** The brand lives in the
+ *    sidebar header (`Sidebar`), and the header slot holds the menu toggle so
+ *    the row keeps its four-element rhythm. The name still appears on the
+ *    landing and auth screens, and inside the sidebar mark itself.
+ *  - **No greeting.** It was removed from the product design so the story row
+ *    could sit directly under the chrome (`docs/PRODUCT_DECISIONS.md`); a
+ *    second line of text is what pushes that row off the fold.
+ *
+ * Search expands **in place**: tapping the pill swaps it for a real input that
+ * takes the same slot, and the results drop below the row. There is no
+ * `/search` route in this app, so search has to live where the user opened it.
+ * The query is the real skill catalogue (`GET /skills/catalog`) — no local
+ * list, no invented results — and the honest note under the field is kept, so
+ * the placeholder never promises a job or company search the API cannot serve.
+ *
+ * The bell opens the existing `/notifications` route, which is an honest
+ * StageScreen notice. It carries **no badge, dot, or count**, because the API
+ * has no notifications router and a badge would be a number the server cannot
+ * supply (PRODUCT_DECISIONS S8).
+ *
+ * The avatar and the name both come from the real authenticated principal.
  */
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { Pressable, TextInput, View } from 'react-native';
+import { Animated, Pressable, TextInput, View } from 'react-native';
 
 import { searchSkillCatalog } from '@/api/profile';
 import { queryKeys } from '@/api/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { AppIcon } from '@/components/ui/AppIcon';
 import { Avatar } from '@/components/ui/Avatar';
-import { BrandMark } from '@/components/ui/BrandMark';
 import { colors } from '@/theme/tokens';
 import { styles } from '@/features/home/homeStyles';
+import { useSidebar } from '@/features/navigation/SidebarContext';
 import type { Principal } from '@/types/auth';
 
 /** Minimum term before the real catalogue request is made. */
 const MIN_QUERY_LENGTH = 2;
+
+const SEARCH_ICON = { ios: 'magnifyingglass', android: 'search' } as const;
 
 export interface DashboardHeaderProps {
   principal: Principal;
@@ -44,108 +54,259 @@ export interface DashboardHeaderProps {
 
 export function DashboardHeader({ principal }: DashboardHeaderProps) {
   const router = useRouter();
+  const { isOpen: isSidebarOpen, toggleSidebar } = useSidebar();
+  const inputRef = useRef<TextInput>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
+
   const trimmed = query.trim();
-  const expanded = trimmed.length >= MIN_QUERY_LENGTH;
+  const hasQuery = trimmed.length >= MIN_QUERY_LENGTH;
+
+  // Menu <-> close morph: a quick fade-scale-rotate keeps the swap from
+  // popping, without a second icon ever on screen.
+  const [menuIconFade] = useState(() => new Animated.Value(1));
+  const [menuIconScale] = useState(() => new Animated.Value(1));
+  const menuIconSpin = menuIconFade.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-45deg', '0deg'],
+  });
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(menuIconFade, {
+        toValue: 0,
+        duration: 90,
+        useNativeDriver: true,
+      }),
+      Animated.timing(menuIconScale, {
+        toValue: 0.7,
+        duration: 90,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      Animated.parallel([
+        Animated.timing(menuIconFade, {
+          toValue: 1,
+          duration: 140,
+          useNativeDriver: true,
+        }),
+        Animated.spring(menuIconScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          speed: 30,
+          bounciness: 4,
+        }),
+      ]).start();
+    });
+  }, [isSidebarOpen, menuIconFade, menuIconScale]);
 
   // Deferred: the catalogue is only requested once the term is long enough,
   // so opening the screen never pulls the whole list.
   const suggestions = useQuery({
     queryKey: queryKeys.skillCatalog(trimmed),
     queryFn: () => searchSkillCatalog(trimmed, 6, 0),
-    enabled: expanded,
+    enabled: isSearchOpen && hasQuery,
   });
 
   const items = suggestions.data?.items ?? [];
 
+  const openSearch = useCallback(() => {
+    setIsSearchOpen(true);
+    // Focus on the next frame: the input does not exist until search is open.
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    inputRef.current?.blur();
+    setIsSearchOpen(false);
+    setQuery('');
+  }, []);
+
+  const clearQuery = useCallback(() => {
+    setQuery('');
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  /**
+   * A skill result is a real destination (`/profile/skills`), so picking one
+   * navigates rather than merely closing the field. Search is closed first so
+   * the header returns to its compact state behind the pushed screen.
+   */
+  const openSkills = useCallback(() => {
+    closeSearch();
+    router.push('/profile/skills' as never);
+  }, [closeSearch, router]);
+
   return (
     <View style={styles.header} testID="dashboard-header">
       <View style={styles.headerRow}>
-        <View style={styles.headerBrand}>
-          <BrandMark size="sm" />
-          <AppText variant="h3" weight="bold" style={styles.brandName}>
-            MahaJob
-          </AppText>
-        </View>
-
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open your profile (${principal.name})`}
+          style={styles.menuToggle}
+          onPress={toggleSidebar}
           hitSlop={8}
-          onPress={() => router.push('/profile' as never)}>
-          <Avatar name={principal.name} size={32} />
+          accessibilityRole="button"
+          accessibilityLabel={isSidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          accessibilityHint="Toggles the navigation sidebar"
+          accessibilityState={{ expanded: isSidebarOpen }}>
+          <Animated.View
+            style={{
+              opacity: menuIconFade,
+              transform: [{ scale: menuIconScale }, { rotate: menuIconSpin }],
+            }}>
+            <AppIcon
+              name={
+                isSidebarOpen
+                  ? { ios: 'xmark', android: 'close' }
+                  : { ios: 'line.3.horizontal', android: 'menu' }
+              }
+              size={22}
+              color={colors.colorTextPrimary}
+            />
+          </Animated.View>
         </Pressable>
-      </View>
 
-      <View style={styles.searchField}>
-        <AppIcon
-          name={{ ios: 'magnifyingglass', android: 'search' }}
-          size={17}
-          color={colors.colorTextTertiary}
-        />
-        <TextInput
-          accessibilityLabel="Search skills"
-          style={styles.searchInput}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search skills"
-          placeholderTextColor={colors.colorTextTertiary}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-      </View>
-
-      {expanded ? (
-        <View style={styles.searchResults}>
-          {suggestions.isPending ? (
-            <AppText variant="small" tone="secondary" style={styles.searchResult}>
-              Searching skills…
-            </AppText>
-          ) : null}
-
-          {suggestions.isError ? (
-            <AppText variant="small" tone="danger" style={styles.searchResult}>
-              Skill search is temporarily unavailable.
-            </AppText>
-          ) : null}
-
-          {!suggestions.isPending && !suggestions.isError && items.length === 0 ? (
-            <AppText variant="small" tone="secondary" style={styles.searchResult}>
-              {`No skills match “${trimmed}”.`}
-            </AppText>
-          ) : null}
-
-          {items.length > 0 ? (
-            items.map((item) => (
+        {isSearchOpen ? (
+          <View style={styles.searchFieldExpanded}>
+            <AppIcon name={SEARCH_ICON} size={17} color={colors.colorTextTertiary} />
+            <TextInput
+              ref={inputRef}
+              accessibilityLabel="Search jobs, companies, and skills"
+              style={styles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search jobs, companies..."
+              placeholderTextColor={colors.colorTextTertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 ? (
               <Pressable
-                key={item.id}
+                style={styles.searchClear}
+                onPress={clearQuery}
+                hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel={`Open skills to review ${item.name}`}
-                onPress={() => router.push('/profile/skills' as never)}
-                style={styles.searchResult}>
-                <AppText variant="small" weight="medium">
-                  {item.name}
-                </AppText>
-                {item.category ? (
-                  <AppText variant="caption" tone="tertiary">
-                    {item.category}
-                  </AppText>
-                ) : null}
+                accessibilityLabel="Clear search">
+                <AppIcon
+                  name={{ ios: 'xmark.circle.fill', android: 'cancel' }}
+                  size={16}
+                  color={colors.colorTextTertiary}
+                />
               </Pressable>
-            ))
-          ) : null}
+            ) : null}
+          </View>
+        ) : (
+          <Pressable
+            style={styles.searchTrigger}
+            onPress={openSearch}
+            accessibilityRole="search"
+            accessibilityLabel="Search jobs, companies, and skills"
+            accessibilityHint="Opens search">
+            <AppIcon name={SEARCH_ICON} size={17} color={colors.colorTextTertiary} />
+            <AppText
+              variant="small"
+              tone="tertiary"
+              numberOfLines={1}
+              style={styles.searchPlaceholder}>
+              Search jobs, companies...
+            </AppText>
+          </Pressable>
+        )}
 
-          <AppText variant="caption" tone="tertiary" style={styles.searchHint}>
-            Skills open on your profile, where you set levels and evidence.
+        {/* While searching, Cancel takes the slot the bell and avatar would
+            occupy, so the input can grow without overlapping either of them. */}
+        {isSearchOpen ? (
+          <Pressable
+            style={styles.searchCancel}
+            onPress={closeSearch}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close search">
+            <AppText variant="small" weight="semibold" tone="accent">
+              Cancel
+            </AppText>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable
+              style={styles.headerAction}
+              onPress={() => router.push('/notifications' as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+              accessibilityHint="Opens notifications">
+              <AppIcon
+                name={{ ios: 'bell', android: 'notifications' }}
+                size={22}
+                color={colors.colorTextPrimary}
+              />
+            </Pressable>
+
+            <Pressable
+              style={styles.headerAction}
+              onPress={() => router.push('/profile' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open your profile (${principal.name})`}
+              accessibilityHint="Opens your profile">
+              <View style={styles.avatarRing}>
+                <Avatar name={principal.name} size={32} />
+              </View>
+            </Pressable>
+          </>
+        )}
+      </View>
+
+      {isSearchOpen ? (
+        hasQuery ? (
+          <View style={styles.searchResults}>
+            {suggestions.isPending ? (
+              <AppText variant="small" tone="secondary" style={styles.searchResult}>
+                Searching skills…
+              </AppText>
+            ) : null}
+
+            {suggestions.isError ? (
+              <AppText variant="small" tone="danger" style={styles.searchResult}>
+                Skill search is temporarily unavailable.
+              </AppText>
+            ) : null}
+
+            {!suggestions.isPending && !suggestions.isError && items.length === 0 ? (
+              <AppText variant="small" tone="secondary" style={styles.searchResult}>
+                {`No skills match “${trimmed}”.`}
+              </AppText>
+            ) : null}
+
+            {items.length > 0
+              ? items.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open skills to review ${item.name}`}
+                    onPress={openSkills}
+                    style={styles.searchResult}>
+                    <AppText variant="small" weight="medium">
+                      {item.name}
+                    </AppText>
+                    {item.category ? (
+                      <AppText variant="caption" tone="tertiary">
+                        {item.category}
+                      </AppText>
+                    ) : null}
+                  </Pressable>
+                ))
+              : null}
+
+            <AppText variant="caption" tone="tertiary" style={styles.searchHint}>
+              Skills open on your profile, where you set levels and evidence.
+            </AppText>
+          </View>
+        ) : (
+          <AppText variant="caption" tone="tertiary">
+            Skill search works today. Job, internship, course, project, and people search arrive with
+            the discovery stage.
           </AppText>
-        </View>
-      ) : (
-        <AppText variant="caption" tone="tertiary">
-          Skill search works today. Job, internship, course, project, and people search arrive with
-          the discovery stage.
-        </AppText>
-      )}
+        )
+      ) : null}
     </View>
   );
 }

@@ -13,8 +13,12 @@
 
 import { apiClient } from '@/api/client';
 import type {
+  AchievementCreate,
+  AchievementRead,
   CandidateSkillCreate,
   CandidateSkillRead,
+  CertificationCreate,
+  CertificationRead,
   Completeness,
   EducationCreate,
   EducationRead,
@@ -72,6 +76,17 @@ export function replacePrivacy(body: PrivacyUpdate): Promise<PrivacyRead> {
       show_phone: body.show_phone,
     },
   });
+}
+
+/**
+ * `GET /profile/preferences` — the stored work modes, employment types, and
+ * preferred locations.
+ *
+ * Read before writing, because `replacePreferences` is replace-semantics: sending a
+ * body assembled from an empty screen would silently erase a real preference list.
+ */
+export function fetchPreferences(): Promise<PreferencesRead> {
+  return apiClient.get<PreferencesRead>('/profile/preferences');
 }
 
 export function replacePreferences(body: PreferencesUpdate): Promise<PreferencesRead> {
@@ -138,3 +153,15 @@ function sectionApi<TRead, TCreate, TUpdate = Partial<TCreate>>(path: string) {
 export const educationApi = sectionApi<EducationRead, EducationCreate>('education');
 export const experienceApi = sectionApi<ExperienceRead, ExperienceCreate>('experience');
 export const projectsApi = sectionApi<ProjectRead, ProjectCreate>('projects');
+
+/**
+ * Certificates and achievements follow the same server contract as the three
+ * above (`/profile/certifications`, `/profile/achievements`), so they reuse the
+ * same descriptor instead of growing a fourth copy of it. Both are read by the
+ * profile screen straight off the aggregate; these exist for the section screens
+ * that write them.
+ */
+export const certificationsApi = sectionApi<CertificationRead, CertificationCreate>(
+  'certifications',
+);
+export const achievementsApi = sectionApi<AchievementRead, AchievementCreate>('achievements');

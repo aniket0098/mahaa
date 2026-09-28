@@ -23,8 +23,10 @@ export default function EmployerLayout() {
   const insets = useSafeAreaInsets();
 
   if (guard.kind === 'loading') return null;
-  if (guard.kind === 'unauthenticated') return <Redirect href={guard.redirect} />;
-  if (guard.kind === 'wrong-role') return <Redirect href={guard.redirect} />;
+  // `needs-onboarding` lands here too: the wizard is outside this tree, so a user
+  // who has not finished it is bounced out rather than shown an employer dashboard
+  // built from a company record that does not exist yet.
+  if (guard.kind !== 'ready') return <Redirect href={guard.redirect as never} />;
 
   return (
     <Tabs

@@ -12,6 +12,7 @@
  */
 
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,24 +21,33 @@ import { BrandMark } from '@/components/ui/BrandMark';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/auth/AuthContext';
-import { homePathForRole } from '@/auth/roleHome';
+import { resolveEntryPath } from '@/auth/entryPath';
 import { HIGHLIGHTS, LATER_STAGES, LIVE_SURFACES, PILLARS } from '@/features/landing/content';
 import { landingStyles as styles } from '@/features/landing/landingStyles';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function LandingScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { status, principal } = useAuth();
 
   const isAuthenticated = status === 'authenticated';
   const primaryLabel = isAuthenticated ? 'Open your dashboard' : 'Create your account';
-  // A signed-in visitor returns to their own tree, so the landing page never
-  // becomes a way into the other role's navigation.
-  const primaryAction = () =>
-    router.push(
-      (isAuthenticated ? homePathForRole(principal?.role ?? 'candidate') : '/signup') as never,
-    );
+  // A signed-in visitor returns to their own entry point, so the landing page never
+  // becomes a way into the other role's navigation. It goes through the same
+  // server-decided helper as login and signup, so somebody whose onboarding is
+  // unfinished is returned to the wizard rather than to a dashboard they have not
+  // earned yet.
+  const primaryAction = () => {
+    if (!isAuthenticated || !principal) {
+      router.push('/signup' as never);
+      return;
+    }
+    void resolveEntryPath(queryClient, principal.role).then((path) => {
+      router.push(path as never);
+    });
+  };
 
   return (
     <View style={styles.root}>

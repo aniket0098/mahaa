@@ -21,13 +21,19 @@ import { describe, expect, it } from 'vitest';
 import {
   CANDIDATE_DETAIL_ROUTES,
   CANDIDATE_TABS,
+  COLLEGE_DETAIL_ROUTES,
+  COLLEGE_TABS,
   EMPLOYER_DETAIL_ROUTES,
   EMPLOYER_TABS,
   PUBLIC_ROUTES,
   detailRoutesForRole,
   detailScreensForRole,
   tabsForRole,
+  type AppRole,
 } from '@/config/navConfig';
+
+/** Every role that owns an authenticated tree. Drives the inventory checks. */
+const APP_ROLES: readonly AppRole[] = ['candidate', 'employer', 'college'];
 
 const APP_DIR = fileURLToPath(new URL('../app', import.meta.url));
 
@@ -50,7 +56,15 @@ const APP_DIR = fileURLToPath(new URL('../app', import.meta.url));
  * passed and the employer tree was unreachable. Resolution now goes through the
  * directory that actually produces the URL.
  */
-const GROUPS = ['(candidate)', '(employer)'] as const;
+/**
+ * The group directories, in the order a path is tried.
+ *
+ * `(college)` is here for the same reason the other two are: it is a separate
+ * authenticated tree, and a `/college/*` path must never resolve inside the
+ * candidate or employer directories. Without it, a college tab whose file landed
+ * in the wrong group would still pass the existence checks.
+ */
+const GROUPS = ['(candidate)', '(employer)', '(college)'] as const;
 
 /**
  * The URL path a file inside a group directory is served at.
@@ -65,11 +79,15 @@ function routePathFor(relative: string): string {
 /** The file that serves a declared path, or null when nothing does. */
 function fileForPath(path: string): string | null {
   const relative = path.replace(/^\//, '');
-  // Only the group that owns the path may serve it. A candidate path is never
-  // allowed to resolve inside `(employer)`, and vice versa.
+  // Only the group that owns the path may serve it. The prefix decides the owner,
+  // and the array order must match that decision ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â otherwise a `/college/*` path
+  // would be looked for in the candidate tree first and a same-named file there
+  // would silently win.
   const groups: (typeof GROUPS)[number][] = relative.startsWith('employer/')
     ? ['(employer)']
-    : ['(candidate)'];
+    : relative.startsWith('college/')
+      ? ['(college)']
+      : ['(candidate)'];
   for (const group of groups) {
     const direct = `${APP_DIR}/${group}/${relative}.tsx`;
     if (existsSync(direct)) return direct;
@@ -99,7 +117,7 @@ describe('authenticated routes', () => {
     }
   });
 
-  it('keeps each role’s files inside that role’s own group directory', () => {
+  it('keeps each roleÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢s files inside that roleÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢s own group directory', () => {
     for (const role of ['candidate', 'employer'] as const) {
       for (const route of [...tabsForRole(role), ...detailRoutesForRole(role)]) {
         if (role === 'candidate') {
@@ -125,12 +143,12 @@ describe('route files on disk', () => {
   it('has no screen file the inventory does not describe', () => {
     const declared = new Set<string>([
       ...PUBLIC_ROUTES,
-      ...CANDIDATE_TABS.map((tab) => tab.path),
-      ...EMPLOYER_TABS.map((tab) => tab.path),
-      ...CANDIDATE_DETAIL_ROUTES.map((route) => route.path),
-      ...EMPLOYER_DETAIL_ROUTES.map((route) => route.path),
+      // Every role's tabs and detail routes, plus the public stack. Built from the
+      // inventory rather than hand-listed, so a new role is covered by construction
+      // instead of needing a second edit here each time one is added.
+      ...APP_ROLES.flatMap((role) => tabsForRole(role).map((tab) => tab.path)),
+      ...APP_ROLES.flatMap((role) => detailRoutesForRole(role).map((r) => r.path)),
     ]);
-
     for (const group of GROUPS) {
       for (const file of walk(`${APP_DIR}/${group}`)) {
         if (file.endsWith('_layout.tsx')) continue;
@@ -142,14 +160,18 @@ describe('route files on disk', () => {
         expect(declared.has(route), `undeclared screen: ${group}/${relative}`).toBe(true);
 
         // A screen must also sit in the group that owns its route. Without this,
-        // `app/(employer)/home.tsx` resolves to `/home` — a route the candidate
-        // inventory already declares — so the screen looked declared while
+        // `app/(employer)/home.tsx` resolves to `/home` ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â a route the candidate
+        // inventory already declares ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â so the screen looked declared while
         // shadowing the candidate home and leaving `/employer/home` unserved.
-        const ownedByEmployer = route.startsWith('/employer/');
+        const expectedGroup = route.startsWith('/employer/')
+          ? '(employer)' 
+          : route.startsWith('/college/')
+            ? '(college)'
+            : '(candidate)';
         expect(
-          ownedByEmployer,
-          `${group}/${relative} is served at ${route}, which does not belong to the ${group} tree`,
-        ).toBe(group === '(employer)');
+          group,
+          `${group}/${relative} is served at ${route}, which belongs to ${expectedGroup}`,
+        ).toBe(expectedGroup);
       }
     }
   });
@@ -164,11 +186,14 @@ describe('route files on disk', () => {
     for (const route of [...EMPLOYER_TABS, ...EMPLOYER_DETAIL_ROUTES]) {
       expect(fileForPath(route.path), route.path).toContain('(employer)');
     }
+    for (const route of [...COLLEGE_TABS, ...COLLEGE_DETAIL_ROUTES]) {
+      expect(fileForPath(route.path), route.path).toContain('(college)');
+    }
   });
 });
 
 describe('role guard wiring in the authenticated shells', () => {
-  const SHELLS = ['(candidate)', '(employer)'] as const;
+  const SHELLS = ['(candidate)', '(employer)', '(college)'] as const;
 
   /**
    * The shells decide what happens before a screen renders, so the redirect the
@@ -178,18 +203,42 @@ describe('role guard wiring in the authenticated shells', () => {
    * the user on an empty view with no way out. The guard returns a `redirect`
    * precisely so the shell can follow it.
    */
+  /**
+   * The shells decide what happens before a screen renders, so the redirect the
+   * guard computes has to actually be performed. Returning `null` for
+   * `unauthenticated`/`wrong-role` renders a blank screen forever: a cold start
+   * on a protected deep link, or a stale link across the role boundary, strands
+   * the user on an empty view with no way out. The guard returns a `redirect`
+   * precisely so the shell can follow it.
+   *
+   * The shells are written as `if (guard.kind !== 'ready') return <Redirect ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦>`,
+   * which covers `unauthenticated`, `wrong-role` **and** `needs-onboarding` in one
+   * branch. Asserting on the old per-kind lines would have made adding the
+   * onboarding state look like a regression, so what is asserted here is the
+   * property that matters: any non-ready guard state performs its redirect.
+   */
   for (const shell of SHELLS) {
     it(`${shell} redirects instead of rendering nothing when the session is unresolved`, () => {
       const source = readFileSync(`${APP_DIR}/${shell}/_layout.tsx`, 'utf8');
 
-      expect(source).toContain("guard.kind === 'unauthenticated'");
-      expect(source).toContain("guard.kind === 'wrong-role'");
-      // A redirect must be rendered for both blocking states...
-      expect(source).toContain('<Redirect href={guard.redirect} />');
-      // ...and neither of them may fall through to a bare `return null`.
-      expect(source).not.toMatch(/guard\.kind === '(unauthenticated|wrong-role)'\) return null/);
+      // The exhaustive redirect: every non-ready state is followed.
+      expect(source).toContain("guard.kind !== 'ready'");
+      expect(source).toContain('<Redirect');
+      // `loading` is the one state that must NOT redirect ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â it renders nothing,
+      // because redirecting mid-resolution is what causes the flash and the loop.
+      expect(source).toContain("guard.kind === 'loading'");
     });
   }
+
+  it('every shell routes an unfinished onboarding back to the wizard', () => {
+    // The guard only helps if the shells actually follow it. `needs-onboarding`
+    // points at /onboarding, and this asserts each shell would honour it rather
+    // than quietly treating it as "ready".
+    for (const shell of SHELLS) {
+      const source = readFileSync(`${APP_DIR}/${shell}/_layout.tsx`, 'utf8');
+      expect(source, shell).toContain("guard.kind !== 'ready'");
+    }
+  });
 });
 
 describe('stage screens', () => {
@@ -221,7 +270,7 @@ describe('stage screens', () => {
   /**
    * A stage screen with no way out is a dead end. It is reachable by a deep
    * link or by a push from a tab, it renders no header (both shells set
-   * `headerShown: false`), and a tab bar offers no edge-swipe — so on iOS the
+   * `headerShown: false`), and a tab bar offers no edge-swipe ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â so on iOS the
    * user is stranded. The back control is therefore unconditional: the old
    * `backToHome={false}` escape hatch is exactly what stranded `/notifications`.
    */
@@ -249,7 +298,7 @@ describe('stage screens', () => {
 
 /**
  * expo-router's `Tabs` injects **every** route it discovers under a Tabs layout
- * into the tab navigator — `useOnlyUserDefinedScreens` is false for `Tabs` — and
+ * into the tab navigator ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â `useOnlyUserDefinedScreens` is false for `Tabs` ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â and
  * the only way to keep a screen out of the bar is to declare it with
  * `href: null`. Left implicit, every detail screen silently became a tab item:
  * twelve entries in the candidate bar and eleven in the employer bar, against a
@@ -300,7 +349,7 @@ describe('detail route back navigation', () => {
   /**
    * The shells render no header, so a detail screen is only escapable through
    * the in-app back control. Every detail screen that renders its own `Screen`
-   * must therefore include one — either directly or through a shared shell
+   * must therefore include one ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â either directly or through a shared shell
    * (`SectionEditor`, `StageScreen`).
    */
   const SHARED_SHELLS = [
@@ -320,7 +369,11 @@ describe('detail route back navigation', () => {
 
         const source = readFileSync(file as string, 'utf8');
         const viaSharedShell = SHARED_SHELLS.some((shell) => source.includes(shell));
-        const hasBackControl = source.includes('<BackButton />') || viaSharedShell;
+        // Matched without the closing bracket so a screen that overrides the
+        // control's handler ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â the composer, which asks before discarding a draft ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â
+        // still counts as having a back control. The intent is "a way out
+        // exists", not "this screen uses the default handler".
+        const hasBackControl = source.includes('<BackButton') || viaSharedShell;
 
         expect(
           hasBackControl,

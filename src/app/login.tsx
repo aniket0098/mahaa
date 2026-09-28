@@ -12,6 +12,7 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { ApiError } from '@/api/errors';
@@ -21,12 +22,13 @@ import { Screen } from '@/components/ui/Screen';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { TextField } from '@/components/ui/TextField';
 import { useAuth } from '@/auth/AuthContext';
-import { homePathForRole } from '@/auth/roleHome';
+import { resolveEntryPath } from '@/auth/entryPath';
 import { ApiConnectionPanel } from '@/features/connection/ApiConnectionPanel';
 import { spacing } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { login } = useAuth();
   // The signup screen sends a duplicate-email visitor here with the address they
   // already typed, so they are not asked to retype it.
@@ -42,10 +44,13 @@ export default function LoginScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      // The principal decides the destination: a candidate lands in the
-      // candidate tree, an employer in the employer tree. The app never guesses.
+      // The principal decides the role, and the server decides whether onboarding
+      // is finished. A person who signed up but never completed onboarding is sent
+      // back to the step they stopped at rather than to a dashboard built from an
+      // incomplete profile — which is the same rule signup follows.
       const principal = await login({ email, password });
-      router.replace(homePathForRole(principal.role) as never);
+      const destination = await resolveEntryPath(queryClient, principal.role);
+      router.replace(destination as never);
     } catch (cause) {
       setError(
         cause instanceof ApiError

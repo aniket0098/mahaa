@@ -2,20 +2,26 @@
  * Candidate Home.
  *
  * Native reconstruction of the web candidate dashboard
- * (`apps/web/src/routes/candidate/HomePage.tsx`), preserving the section order
- * that page declares:
+ * (`apps/web/src/routes/candidate/HomePage.tsx`), with the Community Feed
+ * sitting directly under the Stories row and no heading, intro copy, or composer
+ * card in between — the feed posts themselves start the section:
  *
- *   1. Opportunity stories   4. Personalized feed
- *   2. Composer              5. Continue Learning
- *   3. Quick actions         6. Career snapshot
+ *   1. Opportunity stories   3. Quick actions
+ *   2. Community Feed        4. Continue Learning
+ *                              5. Career snapshot
  *
  * The header sits above all of it as navigation chrome, not as a page section.
+ *
+ * The stories row keeps its own Create (+) entry, which is the only publishing
+ * entry point on this page and opens the honest `/add-post` notice until a posts
+ * API exists.
  *
  * **One request feeds the whole page.** The web app reads only the profile
  * aggregate (`GET /profile`) and derives completeness, skills, preferences and
  * the feed from it; this screen does the same rather than issuing a second
  * `/profile/completeness` call, so the percentage and the feed can never
- * disagree and there is no duplicate fetching.
+ * disagree and there is no duplicate fetching. The Community Feed likewise adds
+ * no request of its own — it re-shapes the records this query already returned.
  *
  * There is deliberately **no greeting block**: the original removed it so the
  * story row could sit directly under the chrome.
@@ -29,6 +35,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 
 import { fetchProfile } from '@/api/profile';
+import { fetchStories } from '@/api/stories';
 import { queryKeys } from '@/api/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { useAuth } from '@/auth/AuthContext';
@@ -36,9 +43,9 @@ import { CareerSnapshot } from '@/features/home/CareerSnapshot';
 import { DashboardHeader } from '@/features/home/DashboardHeader';
 import { LearningSection } from '@/features/home/LearningSection';
 import { OpportunityStories } from '@/features/home/OpportunityStories';
-import { PersonalizedFeed } from '@/features/home/PersonalizedFeed';
-import { PostComposer } from '@/features/home/PostComposer';
+import { CommunityFeed } from '@/features/feed/CommunityFeed';
 import { QuickActions } from '@/features/home/QuickActions';
+import { useStoryList } from '@/features/stories/useStoryList';
 import { styles } from '@/features/home/homeStyles';
 import { spacing } from '@/theme/tokens';
 
@@ -54,13 +61,19 @@ export default function CandidateHomeScreen() {
     queryFn: fetchProfile,
   });
 
+  const storiesQuery = useQuery({
+    queryKey: queryKeys.stories,
+    queryFn: () => fetchStories(),
+  });
+
   const status = profile.isPending ? 'loading' : profile.isError ? 'error' : 'ready';
   const message = profile.error instanceof Error ? profile.error.message : null;
   const data = profile.data;
   const retry = () => void profile.refetch();
 
+  const stories = useStoryList(storiesQuery.data?.items);
+
   const openProfile = useCallback(() => router.push('/profile' as never), [router]);
-  const openJobs = useCallback(() => router.push('/jobs' as never), [router]);
   const openLink = useCallback((url: string) => {
     // Project/credential links are the only outbound URLs, and they open in the
     // system browser rather than inside the app.
@@ -88,24 +101,21 @@ export default function CandidateHomeScreen() {
             content section under it is the story row. */}
         <DashboardHeader principal={principal} />
 
-        <OpportunityStories stories={[]} />
+        <OpportunityStories stories={stories} />
 
-        <PostComposer
-          name={data?.identity.name ?? principal.name}
-          avatarUrl={data?.identity.avatar_url ?? null}
-        />
-
-        <QuickActions onScrollToLearning={scrollToLearning} />
-
-        <PersonalizedFeed
+        {/* The feed sits directly under the Stories row, per the approved
+            layout. It is fed by the same profile query this screen already
+            ran — one request still feeds the whole page. */}
+        <CommunityFeed
           status={status}
           profile={data}
           errorMessage={message}
           onRetry={retry}
           onOpenProfile={openProfile}
-          onOpenJobs={openJobs}
           onOpenLink={openLink}
         />
+
+        <QuickActions onScrollToLearning={scrollToLearning} />
 
         <LearningSection onLayout={setLearningY} />
 
