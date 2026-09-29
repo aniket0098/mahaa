@@ -36,7 +36,7 @@ export const MIN_SKILLS = 3;
  * fields below rather than being forced into one of these — a filter that cannot
  * express "contract work in Berlin" is a filter that hides real preferences.
  */
-export const WORK_MODES: ReadonlyArray<{ value: WorkMode; label: string }> = [
+export const WORK_MODES: readonly { value: WorkMode; label: string }[] = [
   { value: 'remote', label: 'Remote' },
   { value: 'hybrid', label: 'Hybrid' },
   { value: 'onsite', label: 'On-site' },

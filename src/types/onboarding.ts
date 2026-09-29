@@ -100,7 +100,7 @@ export interface PublicProfile {
   email?: string | null;
   phone?: string | null;
   skill_count?: number | null;
-  sections?: Record<string, Array<Record<string, unknown>>>;
+  sections?: Record<string, Record<string, unknown>[]>;
 }
 
 /** One connection request or connection, from the caller's point of view. */

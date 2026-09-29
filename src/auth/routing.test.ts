@@ -25,7 +25,6 @@ import {
   CANDIDATE_DETAIL_ROUTES,
   CANDIDATE_TABS,
   COLLEGE_TABS,
-  EMPLOYER_TABS,
   tabsForRole,
 } from '@/config/navConfig';
 

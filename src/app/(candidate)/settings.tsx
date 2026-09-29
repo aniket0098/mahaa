@@ -9,7 +9,7 @@
  * Account deletion and data export are deliberately absent: no endpoint exists,
  * and a destructive action that cannot complete is worse than an honest absence.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { StyleSheet, View } from 'react-native';
 
@@ -26,8 +26,9 @@ import { SkeletonCard } from '@/components/ui/Skeleton';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { SwitchRow } from '@/components/ui/SwitchRow';
 import { useAuth } from '@/auth/AuthContext';
+import { draftFromPrivacy, shouldReseedDraft } from '@/features/settings/privacyDraft';
 import { spacing } from '@/theme/tokens';
-import type { PrivacyUpdate, ProfileVisibility } from '@/types/profile';
+import type { PrivacyRead, PrivacyUpdate, ProfileVisibility } from '@/types/profile';
 
 const VISIBILITIES: readonly { value: ProfileVisibility; label: string; hint: string }[] = [
   { value: 'private', label: 'Private', hint: 'Only you can see your profile.' },
@@ -41,20 +42,29 @@ export default function CandidateSettingsScreen() {
 
   const privacy = useQuery({ queryKey: queryKeys.privacy, queryFn: fetchPrivacy });
   const [draft, setDraft] = useState<PrivacyUpdate | null>(null);
+  // The server read the current draft was built from. Tracked so the form can be
+  // re-seeded only when that source actually changes.
+  const [seededFrom, setSeededFrom] = useState<PrivacyRead | undefined>(undefined);
 
-  // Seed from the server response. Until it arrives the form is inert, so a PUT
-  // can never be sent with a guessed default.
-  useEffect(() => {
-    if (privacy.data) {
-      setDraft({
-        profile_visibility: privacy.data.profile_visibility,
-        discoverable: privacy.data.discoverable,
-        allow_messages: privacy.data.allow_messages,
-        show_email: privacy.data.show_email,
-        show_phone: privacy.data.show_phone,
-      });
-    }
-  }, [privacy.data]);
+  // Seed from the server response during render, not in an effect.
+  //
+  // The draft is *dependent* state — it is derived from the query result — so an
+  // effect is the wrong tool: it would paint the stale draft for one frame and
+  // then correct it, which is exactly the cascading render the React lint rules
+  // reject (`react-hooks/set-state-in-effect`). React re-runs this component
+  // immediately, before painting and before children, so the form is never shown
+  // with a value the user did not choose.
+  //
+  // The guard is `!==` against the source we last seeded from, so it becomes
+  // false immediately after the update: no loop, and an ordinary re-render keeps
+  // whatever the user has edited.
+  //
+  // Until the query resolves the form stays inert, so a PUT can never be sent
+  // with a guessed default.
+  if (shouldReseedDraft(seededFrom, privacy.data)) {
+    setSeededFrom(privacy.data);
+    setDraft(draftFromPrivacy(privacy.data));
+  }
 
   const save = useMutation({
     mutationFn: (body: PrivacyUpdate) => replacePrivacy(body),

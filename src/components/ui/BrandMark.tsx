@@ -9,7 +9,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
-import { colors, radius, spacing, typography } from '@/theme/tokens';
+import { colors, spacing, typography } from '@/theme/tokens';
 
 export interface BrandMarkProps {
   /** `inverse` for the navy landing surface, `default` for light product screens. */

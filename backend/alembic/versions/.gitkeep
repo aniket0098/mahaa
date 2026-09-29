@@ -1,0 +1,6 @@
+# Alembic looks here for migration scripts.
+#
+# This file exists only so the empty directory survives a clone. Git does not
+# track empty directories, so without it `alembic revision` would fail on a fresh
+# checkout with a confusing "Path doesn't exist" instead of simply creating the
+# folder. Delete this file once the first real migration is added.

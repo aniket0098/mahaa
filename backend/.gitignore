@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Local configuration and secrets — `.env.example` IS committed, `.env` is not.
+.env
+.env.local
+*.env
+!.env.example
+
+# Test and tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Alembic writes nothing to disk, but a local SQLite URL may be used while
+# developing; neither belongs in version control.
+*.db
+*.sqlite3
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

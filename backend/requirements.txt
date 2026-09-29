@@ -1,0 +1,24 @@
+# Mahaa backend — runtime dependencies.
+#
+# Ranges, not exact pins, so a security patch arrives without a manual bump, but
+# bounded so a major release cannot land silently and change behaviour.
+#
+# `psycopg` (3) is the driver. The bare `postgresql://` scheme in a connection
+# string makes SQLAlchemy reach for psycopg2, which is deliberately NOT here;
+# `app/core/config.py` normalises the scheme so a pasted URL still works.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+sqlalchemy>=2.0.32,<2.1
+alembic>=1.13,<2.0
+psycopg[binary]>=3.2,<4.0
+
+# --- development / test only -------------------------------------------------
+# Kept in this file so a local checkout is one `pip install -r` away from a
+# working test run. Render installs these too, which is slightly wasteful and is
+# accepted here for the simplicity of a single install step.
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0
+ruff>=0.6,<1.0
