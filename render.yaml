@@ -1,48 +1,24 @@
 # Mahaa — Render Blueprint.
 #
 # Scope: the Mahaa backend only. It is a separate service from any other project
-# and shares nothing with it — different database, different credentials, no
-# shared env var group.
+# and shares nothing with it — different credentials, no shared env var group.
 #
 # How a Blueprint is applied: Render → New → Blueprint → pick this repository.
-# Apply it ONCE to create the service and its database. After that, manage the
-# service in the dashboard; re-applying is not the way to change settings.
+# Apply it ONCE to create the service. After that, manage the service in the
+# dashboard; re-applying is not the way to change settings.
 #
-# No secret appears in this file. `DATABASE_URL` is a `fromDatabase` reference,
-# so Render injects the connection string it generated and the password is never
-# written down, committed, or pasted anywhere.
-
-databases:
-  # A dedicated database for Mahaa. Render supplies `connectionString` as a
-  # `postgresql://` URL; `app/core/config.py` rewrites the driver to
-  # `postgresql+psycopg://` on the way in.
-  - name: mahaa-db
-    databaseName: mahaa
-    # Major version is pinned so that a future bump is a deliberate edit rather
-    # than a surprise upgrade on the next deploy. 16 is current and supported;
-    # Render's most recent is 18.
-    postgresMajorVersion: "16"
-    # Must match the service's region below, so their connection stays on
-    # Render's private network instead of leaving the region.
-    region: singapore
-    # 'free' is the only valid identifier for the free tier. Every other Render
-    # plan ID is a <cpu>-<ram> pair such as '0.5c-512mb' or '1c-2g'; 'free' is the
-    # documented exception to that format. A value like 'free-256mb' matches
-    # nothing in the spec and is rejected when the Blueprint is applied.
-    #
-    # THE FREE DATABASE DELETES ITSELF AFTER 30 DAYS. On expiry it becomes
-    # inaccessible, you get 14 further days to upgrade, and then Render deletes
-    # it along with all of its data. It is also capped at 1 GB with no backups
-    # of any kind, and only one free database is allowed per workspace. This is
-    # a throwaway for proving the deploy works end to end; move to a paid plan
-    # before any real data exists.
-    plan: free
+# The database is NOT part of this Blueprint. It lives in Neon PostgreSQL, which
+# is managed outside Render. The old Render-managed PostgreSQL resource has been
+# deleted, so nothing here creates or references a Render PostgreSQL resource.
+#
+# No secret appears in this file. `DATABASE_URL` is `sync: false`, so the Neon
+# connection string is set once in the dashboard and is never written down,
+# committed, or pasted anywhere in this repository.
 
 services:
   - type: web
     name: mahaa-backend
     runtime: python
-    # Must match the database's region above.
     region: singapore
     # A scaffold, not a production plan. The free web service spins down when
     # idle, loses local files on redeploy, and restarts at Render's discretion.
@@ -67,12 +43,11 @@ services:
       - key: DEBUG
         value: "false"
 
-      # Injected by Render from the database defined above. The value is never
-      # written in this file and never needs to be pasted into the dashboard.
+      # The Neon PostgreSQL connection string, set once in the Render dashboard
+      # and never stored in this repository. `app/core/config.py` rewrites the
+      # driver to `postgresql+psycopg://` on the way in.
       - key: DATABASE_URL
-        fromDatabase:
-          name: mahaa-db
-          property: connectionString
+        sync: false
 
       # The mobile app's base URL ends in /api/v1, which is a contract, not a
       # preference — it is the path prefix every route is mounted under.

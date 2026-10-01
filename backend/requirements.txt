@@ -15,6 +15,22 @@ sqlalchemy>=2.0.32,<2.1
 alembic>=1.13,<2.0
 psycopg[binary]>=3.2,<4.0
 
+# --- authentication ----------------------------------------------------------
+# `argon2-cffi` is the reference Python binding for Argon2. Passwords are hashed
+# with Argon2id at m=19456 KiB, t=2, p=1 (the OWASP Password Storage Cheat
+# Sheet's minimum), chosen in `app/services/passwords.py` after measuring the
+# cost locally against the Render Free memory budget.
+argon2-cffi>=23.1,<26.0
+
+# `PyJWT` signs and verifies access tokens. V1 is access-token-only: no refresh
+# token, no server-side session, and therefore no rotation code to maintain.
+PyJWT>=2.8,<3.0
+
+# Pydantic's `EmailStr` is a thin wrapper over `email-validator`. It is
+# declared explicitly rather than as `pydantic[email]` so the version bound on
+# the validator is visible next to the rest of the runtime pins.
+email-validator>=2.2,<3.0
+
 # --- development / test only -------------------------------------------------
 # Kept in this file so a local checkout is one `pip install -r` away from a
 # working test run. Render installs these too, which is slightly wasteful and is

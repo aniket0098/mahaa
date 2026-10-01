@@ -13,8 +13,9 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # `script_location` is relative to alembic.ini, and this file may be imported
 # from elsewhere, so the project root is resolved from this file's location.
@@ -22,9 +23,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import app.models  # noqa: E402,F401  (registers every model on Base.metadata)
 from app.core.config import get_settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
-import app.models  # noqa: E402,F401  (registers every model on Base.metadata)
 
 config = context.config
 

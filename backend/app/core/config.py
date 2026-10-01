@@ -18,6 +18,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: ``.env.example`` cannot quietly boot against a real database.
 PLACEHOLDER_DATABASE_URL = "postgresql+psycopg://user:password@localhost:5432/mahaa"
 
+#: Refused in production. Same reasoning as the database placeholder: a signing
+#: key that is "obviously a placeholder" is safe, because production refuses to
+#: start with it, while a key that is a plausible-looking default is not — it
+#: would be copied, committed, and end up signing real tokens for everyone.
+PLACEHOLDER_JWT_SECRET = "dev-only-insecure-secret-change-me"
+
+#: Shortest secret accepted in production. A shorter HS256 key is brute-forceable
+#: offline, so a length floor is a real requirement and not a style preference.
+MIN_JWT_SECRET_LENGTH = 32
+
+#: Symmetric algorithms this service will sign and verify with. Asymmetric ones
+#: are excluded on purpose: they need a key *pair*, and accepting an algorithm
+#: the deployment has no key for is how algorithm-confusion bugs start.
+ALLOWED_JWT_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
+
 
 class Settings(BaseSettings):
     """Runtime settings, validated once at boot."""
@@ -65,6 +80,31 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: str = ""
 
+    # --- authentication -----------------------------------------------------
+    #: Signs access tokens. V1 is access-token-only: there is no refresh token,
+    #: so signing in again is the only way to extend a session. That is a
+    #: deliberate product decision, not an omission (see the V1 spec §4.8).
+    jwt_secret: str = Field(default=PLACEHOLDER_JWT_SECRET)
+    #: Pinned to a single algorithm. The `alg` header of an incoming token is
+    #: never trusted — an unpinned decoder accepts `alg: none` and the
+    #: algorithm-confusion attack that follows from it.
+    jwt_algorithm: str = Field(default="HS256")
+    #: 60 minutes. Long enough that an active user is not logged out mid-task,
+    #: short enough that a stolen token on a lost phone expires on its own.
+    access_token_expire_minutes: int = Field(default=60)
+    #: Checked on every decode. A token minted for a different service, or for a
+    #: different environment of this service, is rejected rather than trusted.
+    jwt_issuer: str = Field(default="mahaa-api")
+    jwt_audience: str = Field(default="mahaa-mobile")
+
+    # --- rate limiting ------------------------------------------------------
+    #: Auth-endpoint limits, per client IP, per fixed window. `0` disables the
+    #: limiter entirely, which is how the test suite keeps a fast run from
+    #: locking itself out.
+    auth_rate_limit_per_window: int = Field(default=10)
+    auth_rate_limit_window_seconds: int = Field(default=60)
+    auth_rate_limit_enabled: bool = Field(default=True)
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [
@@ -97,6 +137,32 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CORS_ORIGINS must list exact origins in production, never '*'."
             )
+
+        # --- authentication must fail closed too -----------------------------
+        # A service that starts with a placeholder signing key will happily mint
+        # tokens that anyone can forge. Refusing to boot is the only safe
+        # response: the alternative is a live deployment whose entire auth model
+        # is a public string.
+        if not self.jwt_secret:
+            raise ValueError("JWT_SECRET is required in production (fail-closed).")
+        if self.jwt_secret == PLACEHOLDER_JWT_SECRET:
+            raise ValueError(
+                "JWT_SECRET is still the development placeholder. Production "
+                "refuses to sign tokens with a public key."
+            )
+        if len(self.jwt_secret) < MIN_JWT_SECRET_LENGTH:
+            raise ValueError(
+                f"JWT_SECRET must be at least {MIN_JWT_SECRET_LENGTH} characters."
+            )
+        if self.jwt_algorithm not in ALLOWED_JWT_ALGORITHMS:
+            raise ValueError(
+                "JWT_ALGORITHM must be one of "
+                f"{sorted(ALLOWED_JWT_ALGORITHMS)}; got {self.jwt_algorithm!r}."
+            )
+        if self.access_token_expire_minutes <= 0:
+            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be positive.")
+        if not self.jwt_issuer or not self.jwt_audience:
+            raise ValueError("JWT_ISSUER and JWT_AUDIENCE must not be empty.")
         return self
 
     @property

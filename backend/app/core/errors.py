@@ -31,6 +31,7 @@ class ErrorCode:
     BAD_REQUEST = "bad_request"
     VALIDATION_ERROR = "validation_error"
     NOT_AUTHENTICATED = "not_authenticated"
+    INVALID_CREDENTIALS = "invalid_credentials"
     FORBIDDEN = "forbidden"
     NOT_FOUND = "not_found"
     CONFLICT = "conflict"
@@ -52,6 +53,15 @@ DEFAULT_MESSAGES: dict[int, str] = {
     status.HTTP_429_TOO_MANY_REQUESTS: "Too many attempts. Please try again shortly.",
     status.HTTP_503_SERVICE_UNAVAILABLE: "The service is temporarily unavailable.",
 }
+
+
+#: One sentence for BOTH an unknown email and a wrong password, used verbatim by
+#: ``POST /auth/login``. A login failure that distinguishes the two is an
+#: account-enumeration oracle: it turns "sign in" into a way to discover who has
+#: an account here. It is a constant rather than a ``DEFAULT_MESSAGES`` entry
+#: because it is chosen deliberately for one endpoint, and a 401 from any other
+#: route ("Please sign in to continue") means something different.
+INVALID_CREDENTIALS_MESSAGE = "The email or password is not correct."
 
 
 def error_detail(
