@@ -29,7 +29,11 @@ from app.core.errors import (
     error_payload,
     message_for,
 )
-from app.core.logging import configure_logging, get_logger
+from app.core.logging import (
+    configure_logging,
+    get_logger,
+    install_access_log_redactor,
+)
 from app.realtime.runtime import build_runtime, set_runtime
 
 settings = get_settings()
@@ -56,6 +60,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     runtime = None
     try:
+        # Keep the realtime socket's access token out of the access log. This runs
+        # in the lifespan rather than at import because uvicorn applies its own
+        # logging configuration when the server loads, and that resets a logger's
+        # filters — an import-time filter would be silently discarded and the leak
+        # would persist while appearing to be fixed.
+        install_access_log_redactor(settings.api_prefix)
         runtime = build_runtime()
         set_runtime(runtime)
         await runtime.start()

@@ -98,22 +98,29 @@ async def _authenticate(token: str | None) -> User | None:
         factory = session_factory()
         if factory is not None:
             session = factory()
-        else:
-            session = session_scope()
-        try:
+            try:
+                user = session.get(User, user_id)
+                if user is None:
+                    return None
+                # `expire_on_commit` is off on SessionLocal, so these attributes
+                # stay readable after the session is closed — which matters because
+                # the socket outlives it.
+                _ = (user.id, user.status)
+                return user
+            finally:
+                session.close()
+        # `session_scope` is a **context manager**, not a Session constructor.
+        # Calling it without `with` hands back a context-manager object, and the
+        # first attribute access on that raises AttributeError — so the default
+        # path failed closed for every real client while the suite passed, because
+        # every test injects a factory and never reaches this branch. Entering it
+        # properly is the whole fix.
+        with session_scope() as session:
             user = session.get(User, user_id)
             if user is None:
                 return None
-            # `expire_on_commit` is off on SessionLocal, so these attributes
-            # stay readable after the session is closed — which matters because
-            # the socket outlives it.
             _ = (user.id, user.status)
             return user
-        finally:
-            if factory is not None:
-                session.close()
-            else:
-                session.commit()
     except Exception as exc:  # noqa: BLE001 - never leak a driver message
         logger.warning(
             "realtime auth lookup failed", extra={"reason": type(exc).__name__}

@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
+from contextlib import contextmanager
 
 import pytest
 from sqlalchemy.orm import Session
@@ -551,6 +553,248 @@ def test_realtime_can_be_switched_off_and_then_refuses_connections():
     finally:
         settings.realtime_enabled = previous
         client.__exit__(None, None, None)
+
+
+def test_the_default_session_path_resolves_a_real_user(
+    monkeypatch, db_session, user_factory
+):
+    """Regression: the *default* socket-auth path was broken for every real client.
+
+    ``_authenticate`` opened its session with ``session_scope()`` as though that
+    call returned a ``Session``. It does not — ``session_scope`` is a context
+    manager, so the first attribute access raised ``AttributeError``, the broad
+    ``except`` turned that into ``None``, and every socket closed with 1008
+    "Authentication required" **even with a perfectly valid token**.
+
+    It reached production because every other test in this file installs a
+    session factory, so the default branch — the only one a real client takes —
+    had no coverage at all. This test exercises that branch directly and also
+    asserts the scope is *entered*, which is what distinguishes the fix from the
+    original.
+    """
+    import app.api.v1.ws as ws
+    from app.services.tokens import create_access_token
+
+    user = user_factory()
+    minted = create_access_token(
+        user_id=str(user.id), role="candidate", public_id=user.public_id
+    )
+    entered: list[bool] = []
+
+    @contextmanager
+    def fake_scope():
+        entered.append(True)
+        yield db_session
+
+    # No factory installed: this is the production path.
+    monkeypatch.setattr(ws, "session_factory", lambda: None)
+    monkeypatch.setattr(ws, "session_scope", fake_scope)
+
+    resolved = run(ws._authenticate(minted.token))
+
+    assert entered, "session_scope must be entered with `with`, not merely called"
+    assert resolved is not None, "a valid token must resolve its user"
+    assert resolved.id == user.id
+
+
+def test_the_default_session_path_still_refuses_a_forged_token(monkeypatch, db_session):
+    """The same branch must not become a way in: a forged token stays rejected."""
+
+    import app.api.v1.ws as ws
+
+    @contextmanager
+    def fake_scope():
+        yield db_session
+
+    monkeypatch.setattr(ws, "session_factory", lambda: None)
+    monkeypatch.setattr(ws, "session_scope", fake_scope)
+
+    assert run(ws._authenticate("not-a-real-jwt")) is None
+
+
+# --- the access log must not carry the socket's token ------------------------
+#
+# A browser WebSocket cannot send an Authorization header, so the access token
+# rides in the query string. `ws.py` never logs it, but uvicorn's *access* logger
+# prints the whole request line — so every socket connection used to write a live
+# bearer token to disk. These tests pin the redaction, and they use a token-shaped
+# string that is obviously not a credential.
+
+#: Obviously fake, JWT-shaped, and unique so it cannot collide with anything real.
+FAKE_JWT = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "REDACTION-PROBE-PAYLOAD-must-not-appear-in-logs."
+    "REDACTION-PROBE-SIGNATURE-must-not-appear-in-logs"
+)
+
+
+def _uvicorn_access_record(path: str, *, http_version: str = "1.1"):
+    """Build a LogRecord shaped exactly like uvicorn's **HTTP** access line.
+
+    uvicorn logs ``'%s - "%s %s HTTP/%s" %d'`` with (client_addr, method,
+    path_with_query_string, http_version, status), so index 2 of ``args`` is the
+    full path including any query string.
+    """
+    return logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "%s %s HTTP/%s" %d',
+        args=("127.0.0.1:51000", "GET", path, http_version, 101),
+        exc_info=None,
+    )
+
+
+def _uvicorn_ws_record(path: str):
+    """Build a LogRecord shaped exactly like uvicorn's **WebSocket** access line.
+
+    This is a *different* shape from the HTTP one: the protocol code logs
+    ``'%s - "WebSocket %s" [accepted]'`` with only (client_addr, path), so the
+    path is at index 1. An earlier version of the redactor assumed index 2 and
+    therefore silently did nothing to the very line it was written for — which is
+    why both shapes are pinned here.
+    """
+    return logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='%s - "WebSocket %s" [accepted]',
+        args=("127.0.0.1:51000", path),
+        exc_info=None,
+    )
+
+
+def test_the_redactor_strips_the_token_from_the_socket_access_line():
+    """The shape uvicorn actually uses for a WebSocket — the one that leaked."""
+
+    from app.core.logging import RealtimeTokenRedactor
+
+    record = _uvicorn_ws_record(f"/api/v1/ws?token={FAKE_JWT}")
+    assert RealtimeTokenRedactor("/api/v1").filter(record) is True
+
+    assert FAKE_JWT not in record.getMessage()
+    assert "?" not in record.getMessage()
+    # The route itself survives, so the line is still useful for diagnostics.
+    assert record.args[1] == "/api/v1/ws"
+    assert "/api/v1/ws" in record.getMessage()
+
+
+def test_the_redactor_also_handles_the_http_record_shape():
+    """Defensive: the same route arriving through the HTTP-shaped record."""
+
+    from app.core.logging import RealtimeTokenRedactor
+
+    record = _uvicorn_access_record(f"/api/v1/ws?token={FAKE_JWT}")
+    RealtimeTokenRedactor("/api/v1").filter(record)
+
+    assert FAKE_JWT not in record.getMessage()
+    assert record.args[2] == "/api/v1/ws"
+
+
+def test_the_redactor_leaves_ordinary_http_access_lines_alone():
+    """The filter must be narrow: a normal request keeps its query string."""
+
+    from app.core.logging import RealtimeTokenRedactor
+
+    record = _uvicorn_access_record("/api/v1/users/lookup?query=someone")
+    RealtimeTokenRedactor("/api/v1").filter(record)
+
+    assert record.args[2] == "/api/v1/users/lookup?query=someone"
+    assert "query=someone" in record.getMessage()
+
+
+def test_the_redactor_leaves_a_queryless_socket_line_alone():
+    from app.core.logging import RealtimeTokenRedactor
+
+    record = _uvicorn_ws_record("/api/v1/ws")
+    RealtimeTokenRedactor("/api/v1").filter(record)
+
+    assert record.args[1] == "/api/v1/ws"
+
+
+def test_the_redactor_does_not_match_a_similarly_named_route():
+    """``/api/v1/wsproxy`` is a different endpoint and must not be rewritten."""
+
+    from app.core.logging import RealtimeTokenRedactor
+
+    for record in (
+        _uvicorn_access_record("/api/v1/wsproxy?token=keep-me"),
+        _uvicorn_ws_record("/api/v1/wsproxy?token=keep-me"),
+    ):
+        RealtimeTokenRedactor("/api/v1").filter(record)
+
+    assert "keep-me" in record.getMessage()
+
+
+def test_installation_covers_both_uvicorn_loggers_and_is_idempotent():
+    """Both loggers, because uvicorn emits the socket line on ``uvicorn.error``.
+
+    This is the assertion that would have caught the real bug: a filter attached
+    only to ``uvicorn.access`` passes every HTTP-shaped test and still leaves the
+    credential in the log.
+    """
+    from app.core.logging import RealtimeTokenRedactor, install_access_log_redactor
+
+    install_access_log_redactor("/api/v1")
+    install_access_log_redactor("/api/v1")
+
+    for name in ("uvicorn.access", "uvicorn.error"):
+        redactors = [
+            f for f in logging.getLogger(name).filters
+            if isinstance(f, RealtimeTokenRedactor)
+        ]
+        assert len(redactors) == 1, f"{name} needs exactly one redactor"
+
+
+def test_the_socket_record_is_redacted_on_the_logger_that_actually_emits_it(caplog):
+    """The end-to-end check, on ``uvicorn.error`` — where the leak came from.
+
+    Emits the exact record uvicorn's WebSocket protocol emits, on the exact logger
+    it emits it to, and proves the token value never reaches captured output.
+    """
+
+    from app.core.logging import install_access_log_redactor
+
+    install_access_log_redactor("/api/v1")
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        logging.getLogger("uvicorn.error").info(
+            '%s - "WebSocket %s" [accepted]',
+            "127.0.0.1:51000",
+            f"/api/v1/ws?token={FAKE_JWT}",
+        )
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert FAKE_JWT not in combined
+    assert "REDACTION-PROBE" not in combined
+    assert "/api/v1/ws" in combined, "the route must still be logged"
+
+
+def test_the_redactor_survives_on_the_real_logger(caplog):
+    """End-to-end through the logger, not just the filter object.
+
+    This is the assertion that would actually have caught the leak: emit the exact
+    record uvicorn emits, let the logger do its own dispatch, and prove the token
+    value never reaches captured output. Asserting only for the word "token" would
+    pass even with the credential still present.
+    """
+
+    from app.core.logging import install_access_log_redactor
+
+    install_access_log_redactor("/api/v1")
+    logger = logging.getLogger("uvicorn.access")
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        logger.info(
+            '%s - "WebSocket %s" [accepted]',
+            "127.0.0.1:51000",
+            f"/api/v1/ws?token={FAKE_JWT}",
+        )
+
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert FAKE_JWT not in combined
+    assert "REDACTION-PROBE" not in combined
+    assert "/api/v1/ws" in combined, "the route must still be logged"
 
 
 def test_a_refused_socket_is_never_registered():
