@@ -86,12 +86,21 @@ def create_app() -> FastAPI:
     A factory rather than a module-level instance, so tests can build an app with
     different settings and never share state with the running service.
     """
+    # Interactive documentation and the raw schema are development affordances.
+    # In production they are removed entirely (``None`` tells FastAPI not to
+    # register the route at all, which is what produces the 404) because the
+    # schema is a complete map of the API surface: every route, parameter and
+    # model, handed to anyone who asks. Nothing here is a secret, but the
+    # reconnaissance value is real and the docs are not needed to run the
+    # service. Local development keeps them.
+    expose_docs = not settings.is_production
+
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if expose_docs else None,
+        redoc_url="/redoc" if expose_docs else None,
+        openapi_url="/openapi.json" if expose_docs else None,
         lifespan=_lifespan,
     )
 
