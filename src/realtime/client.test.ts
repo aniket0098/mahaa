@@ -144,6 +144,17 @@ describe('socketUrlFor', () => {
       'wss://api.example.com/api/v1/ws',
     );
   });
+
+  it('derives the real production socket url from the shipped base URL', () => {
+    // The socket is built from the same resolved base URL as REST, so it inherits
+    // the Phase 4 fix that stops a physical device preferring the developer LAN
+    // address. Asserting the real host here means a second, divergent hardcoded
+    // socket hostname cannot creep in unnoticed — the symptom would otherwise be
+    // "sign-in works, the live inbox never updates".
+    expect(
+      socketUrlFor('https://mahaa-backend.onrender.com/api/v1'),
+    ).toBe('wss://mahaa-backend.onrender.com/api/v1/ws');
+  });
 });
 
 // --- parsing --------------------------------------------------------------
