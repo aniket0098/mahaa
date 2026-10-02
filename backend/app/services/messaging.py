@@ -55,6 +55,7 @@ from app.models import (
     User,
 )
 from app.models.enums import ConnectionStatus, NotificationType
+from app.realtime import messaging_events, notification_events
 from app.schemas.messaging import (
     ConversationPage,
     ConversationRead,
@@ -63,7 +64,7 @@ from app.schemas.messaging import (
     MessageRead,
 )
 from app.schemas.users import UserSummary
-from app.services import notifications
+from app.services import notifications, push
 from app.services.ownership import parse_id
 
 #: How many messages a page may hold. The same ceiling the profile sections use
@@ -766,7 +767,7 @@ def send(
     # and the message it describes are written by one transaction: a message
     # cannot exist without its notification, and the IntegrityError arm above
     # (which returns `False` and never reaches here) cannot leave one behind.
-    notifications.emit(
+    notification = notifications.emit(
         session,
         recipient_id=recipient,
         notification_type=NotificationType.MESSAGE,
@@ -780,6 +781,39 @@ def send(
     )
     session.commit()
     session.refresh(message)
+
+    # Phase 3 realtime: after the commit, so a rollback leaves no event. A message
+    # legitimately produces TWO events — `message.created` for the thread and
+    # `notification.created` for the badge — and they are not interchangeable: the
+    # first carries the body, the second carries only the notification's own
+    # fields. Publishing only one would leave the recipient's badge stale.
+    notification_events.publish_for(notification)
+
+    # Phase 2 realtime: ONLY now, after the commit returned. A rollback at any
+    # point above would leave the recipient holding an event for a message that
+    # does not exist, and no client-side reconciliation repairs that.
+    #
+    # `created` is false on the idempotent paths above (already stored, or lost
+    # a race), and both returned before reaching here — so this fires once per
+    # stored message and never for a retry.
+    messaging_events.message_created(
+        recipient_user_id=str(recipient),
+        message_id=str(message.id),
+        conversation_id=str(message.conversation_id),
+        sender_user_id=str(message.sender_id),
+        created_at=message.created_at.isoformat(),
+        body=message.body,
+        client_message_id=message.client_message_id,
+    )
+
+    # Phase 4 push: last, and strictly after the commit above. Two reasons for the
+    # position, not just the ordering: a rollback leaves no push, so a message that
+    # does not exist can never appear on a lock screen; and it runs *after* both
+    # socket publishes because that call is synchronous network I/O to a third
+    # party, and the foreground path must not wait on it. A recipient with the app
+    # open is served by the socket; push is the background fallback and has no
+    # business being in front of it.
+    push.dispatch(session, notification)
     return message_read(message), True
 
 
@@ -816,6 +850,27 @@ def mark_read(
     member.last_read_message_id = message.id
     session.add(member)
     session.commit()
+
+    # Phase 2 realtime: after the commit, and only because the pointer actually
+    # moved. The early return above fires no event — re-announcing a read that
+    # did not change would make the recipient's UI flicker for nothing.
+    #
+    # The audience is the other participant, derived from the conversation's own
+    # membership rows, and the reader is `viewer` — the authenticated caller.
+    # Neither value came from the request.
+    recipients = [
+        other.user_id
+        for other in _sorted_members(conversation)
+        if other.user_id != viewer.id
+    ]
+    for recipient in recipients:
+        messaging_events.conversation_read(
+            recipient_user_id=str(recipient),
+            conversation_id=str(conversation.id),
+            reader_user_id=str(viewer.id),
+            last_read_message_id=str(message.id),
+            read_at=datetime.now(UTC).isoformat(),
+        )
 
 
 def soft_delete(session: Session, viewer: User, raw_id: str) -> None:

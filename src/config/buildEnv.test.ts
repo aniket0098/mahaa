@@ -7,8 +7,10 @@
  *
  *  - a production EAS build must carry the production API URL, because `.env`
  *    is git-ignored and therefore never reaches the EAS Build server;
- *  - the development and preview profiles must stay unpinned, so a developer's
- *    build keeps resolving their own API instead of silently hitting production;
+ *  - the same applies to the `preview` profile, whose APK is installed on a real
+ *    phone where the emulator alias is unroutable;
+ *  - the development profile must stay unpinned, so a developer's build keeps
+ *    resolving their own API instead of silently hitting production;
  *  - the pinned value may only ever be the public API origin, never a backend
  *    secret.
  */
@@ -24,7 +26,7 @@ const EAS_JSON = fileURLToPath(new URL('../../eas.json', import.meta.url));
 const ENV_EXAMPLE = fileURLToPath(new URL('../../.env.example', import.meta.url));
 
 /** The deployed API. Plain text by design: `EXPO_PUBLIC_*` ships in the bundle. */
-const PRODUCTION_API_BASE_URL = 'https://mahajob-api.onrender.com/api/v1';
+const PRODUCTION_API_BASE_URL = 'https://mahaa-backend.onrender.com/api/v1';
 
 interface BuildProfile {
   env?: Record<string, string>;
@@ -94,12 +96,20 @@ describe('eas.json build profiles', () => {
     );
   });
 
-  it('leaves the development and preview profiles unpinned', () => {
-    // A pinned URL in either profile would point a developer's build at
-    // production, so neither may declare one.
-    for (const profile of ['development', 'preview']) {
-      expect(buildProfiles()[profile]?.env?.EXPO_PUBLIC_API_BASE_URL, profile).toBeUndefined();
-    }
+  it('leaves the development profile unpinned', () => {
+    // A pinned URL here would point a developer's own build at production, so
+    // this profile must keep resolving whatever their local `.env` says.
+    expect(buildProfiles().development?.env?.EXPO_PUBLIC_API_BASE_URL).toBeUndefined();
+  });
+
+  it('pins the preview profile, which is installed on a real device', () => {
+    // The preview APK is sideloaded onto a physical phone, and 10.0.2.2 is the
+    // Android *emulator* alias — unroutable from real hardware. So this profile
+    // has to carry the deployed API explicitly, or the installed APK cannot
+    // reach the backend at all.
+    expect(buildProfiles().preview?.env?.EXPO_PUBLIC_API_BASE_URL).toBe(
+      PRODUCTION_API_BASE_URL,
+    );
   });
 
   it('keeps the production profile free of backend secrets', () => {

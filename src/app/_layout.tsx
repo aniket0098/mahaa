@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { queryClient } from '@/api/queryClient';
 import { AuthProvider } from '@/auth/AuthProvider';
+import { PushBootstrap } from '@/notifications/PushBootstrap';
 import { colors } from '@/theme/tokens';
 
 export default function RootLayout() {
@@ -24,6 +25,9 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <StatusBar style="dark" />
+            {/* Push is wired here rather than in the authenticated layouts so a tap
+                that arrives while signed out still resolves to a real screen. */}
+            <PushBootstrap />
             <Stack
               screenOptions={{
                 headerShown: false,

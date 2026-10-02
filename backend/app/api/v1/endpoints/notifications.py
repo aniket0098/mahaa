@@ -37,7 +37,13 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, status
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.notifications import NotificationPage, UnreadCount
+from app.schemas.notifications import (
+    DeviceRead,
+    DeviceRegistration,
+    NotificationPage,
+    UnreadCount,
+)
+from app.services import devices as device_svc
 from app.services import notifications as svc
 from app.services.notifications import (
     NOTIFICATION_PAGE_DEFAULT,
@@ -130,4 +136,52 @@ def mark_all_notifications_read(
     """
 
     svc.mark_all_read(session, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- device registration (§13.6) -------------------------------------------
+
+
+@router.post(
+    "/notifications/devices",
+    response_model=DeviceRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register this device for push delivery",
+)
+def register_device(
+    payload: DeviceRegistration, current_user: CurrentUser, session: DbSession
+) -> DeviceRead:
+    """Register or refresh the caller's own push device.
+
+    Idempotent (§13.6): the same user and the same token always resolve to the
+    same device, so a client may call this on every authenticated start without
+    accumulating rows. A device the provider rejected is reactivated here rather
+    than duplicated.
+
+    **The response cannot contain the token.** `DeviceRead` has no field for it,
+    so §13.6's "never echoed" is a property of the schema rather than of
+    developer care. The body is the same shape for a new and an existing device —
+    the client keys off `id`, not the status — so the fixed 201 is not misleading.
+    """
+
+    return device_svc.register(session, current_user, payload)
+
+
+@router.delete(
+    "/notifications/devices/{device_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove this device's push registration",
+)
+def remove_device(
+    device_id: str, current_user: CurrentUser, session: DbSession
+) -> Response:
+    """Remove one of the caller's own device registrations.
+
+    Called on logout, so it must not be able to delay or fail the logout: a
+    network error here is recoverable — the next successful registration for that
+    token is idempotent — and a token belonging to another account is the **same**
+    404 as one that does not exist (§16).
+    """
+
+    device_svc.remove(session, current_user, device_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

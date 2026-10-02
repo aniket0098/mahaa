@@ -124,6 +124,14 @@ def emit(
     ``actor_id`` is optional and defaults to ``None``, which is §13.2's "not
     shown" state and the only way a ``system`` notification is expressed. Nothing
     else in the module can produce that state, so the distinction stays honest.
+
+    **It deliberately does not publish a realtime event.** A caller invokes this
+    *before* its ``session.commit()`` — that ordering is what makes the
+    notification and the connection/message row atomic — so an event raised here
+    would describe a row a rollback could still erase. Publishing is the caller's
+    job, immediately after its commit returns; see
+    ``realtime/notification_events.py`` for why the integration point is here and
+    not inside this function.
     """
 
     notification = Notification(

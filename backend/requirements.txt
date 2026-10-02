@@ -31,6 +31,15 @@ PyJWT>=2.8,<3.0
 # the validator is visible next to the rest of the runtime pins.
 email-validator>=2.2,<3.0
 
+# --- realtime ------------------------------------------------------------
+# `redis` provides the asyncio client and Pub/Sub used by
+# `app/core/redis.py`. It is optional at runtime: with no `REDIS_URL` the
+# realtime hub still works for a single process and every REST route is
+# unaffected. Installed here rather than commented out because a cloud build
+# must not silently lack the one dependency that makes multi-instance fan-out
+# possible.
+redis>=5.0,<6.0
+
 # --- development / test only -------------------------------------------------
 # Kept in this file so a local checkout is one `pip install -r` away from a
 # working test run. Render installs these too, which is slightly wasteful and is

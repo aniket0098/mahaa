@@ -1,4 +1,5 @@
-"""``notifications`` — the one domain that reads across every other one.
+"""``notifications`` and ``user_devices`` — the one domain that reads across every
+other one.
 
 A single table (§14.7), and the column list is the specification's verbatim. The
 decisions worth stating are the ones where the obvious alternative is wrong.
@@ -44,21 +45,25 @@ ordered list. Neither alone can do the other's job.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
+from app.db.base import Base, CreatedAtMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import NotificationType, pg_enum
 
 
@@ -137,3 +142,75 @@ class Notification(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     #: Loaded only to build the read model. The nullable actor means the read
     #: model must genuinely cope with ``actor`` being absent (§13.2).
     actor: Mapped["User | None"] = relationship(foreign_keys=[actor_id])  # noqa: F821
+
+
+class UserDevice(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One registered push device (§14.13), owned by one account.
+
+    **``push_token`` is a credential**, and this module treats it the way the
+    project treats a password hash: it is stored, and it is never logged, never
+    rendered into a response model, and never included in an error detail. The
+    read model below is the reason that is structural rather than a matter of
+    discipline — a response class that cannot express the token cannot leak it.
+
+    **Unique ``(user_id, push_token)``, not a unique token.** Two accounts may
+    legitimately hold the same value if a device changes hands, and collapsing
+    them would let whichever registered last take delivery for both. Scoping
+    uniqueness to the owner is what makes registration idempotent for one user
+    without denying another their device.
+
+    **``is_active`` exists so a token is disabled rather than deleted.** §13.5:
+    when Expo reports ``DeviceNotRegistered`` the row is marked inactive and kept.
+    A provider error is frequently transient, and destroying a registration the
+    user will need again would turn a delivery hiccup into a lost device.
+
+    **``last_seen_at`` is what makes re-registration meaningful** — it records
+    that this token is still being presented by a real client, which is the
+    evidence that re-activating an inactive row is legitimate rather than a way
+    to resurrect a revoked device.
+    """
+
+    __tablename__ = "user_devices"
+    __table_args__ = (
+        # §14.13's idempotency rule. The application also checks for an existing
+        # row first, so this constraint is the backstop that makes a concurrent
+        # double-registration impossible rather than merely unlikely.
+        UniqueConstraint(
+            "user_id",
+            "push_token",
+            name="uq_user_devices_user_id_push_token",
+        ),
+        # The lookup delivery performs: "this user's active devices". Without it
+        # every push would scan a user's whole device list.
+        Index("ix_user_devices_user_id_is_active", "user_id", "is_active"),
+        {"comment": "One push registration per user. push_token is a credential."},
+    )
+
+    #: The owner. Always the JWT subject (§13.6) — never a request field, for
+    #: the same reason `Notification.user_id` is not: a device is a delivery
+    #: target for somebody, and a client must not be able to name whom.
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    #: The provider's token for this device. A credential: never logged (§20.3).
+    push_token: Mapped[str] = mapped_column(Text, nullable=False)
+    #: §14.13's two-value CHECK, not a PostgreSQL ENUM — the same choice every
+    #: other vocabulary in this project makes. `android` is what the current
+    #: client uses; `ios` is here so shipping there needs no migration.
+    platform: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint(
+            "platform IN ('android', 'ios')", name="ck_user_devices_platform"
+        ),
+        nullable=False,
+    )
+    device_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: §13.5: an invalidated token is disabled, not deleted.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true", default=True
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    user: Mapped["User"] = relationship()  # noqa: F821

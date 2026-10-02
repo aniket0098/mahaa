@@ -21,11 +21,22 @@ import { apiClient } from '@/api/client';
 import { ApiError } from '@/api/errors';
 import { AuthContext, type AuthContextValue } from '@/auth/AuthContext';
 import { tokenStorage } from '@/auth/tokenStorage';
+import { pushDeviceStore } from '@/notifications/deviceStore';
+import { unregisterForPush } from '@/notifications/push';
 import type { AuthStatus, LoginFormValues, Principal, SignupFormValues } from '@/types/auth';
 
 interface AuthProviderProps {
   children: ReactNode;
 }
+
+/**
+ * How long logout waits for the unregister before giving up on it.
+ *
+ * Short enough that a user never perceives a stall, long enough for a healthy
+ * request on a normal connection. This is the only reason logout is not
+ * instantaneous, so it is deliberately a small number.
+ */
+const LOGOUT_PUSH_TIMEOUT_MS = 2_000;
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -86,7 +97,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return me;
   }, []);
 
+  /**
+   * Clear the session, unregistering the push device first.
+   *
+   * **The unregister is best-effort and bounded.** A user tapping "log out" on a
+   * flaky connection must still be logged out: the request carries a short timeout
+   * and its failure is swallowed, because the registration expires on its own and
+   * the next sign-in re-registers idempotently. What must not happen is a logout
+   * that hangs on a network call.
+   *
+   * It runs *before* `tokenStorage.clear()` because the call is authenticated —
+   * clearing the token first would turn every unregister into a 401.
+   */
   const logout = useCallback(async () => {
+    const deviceId = await pushDeviceStore.get();
+    if (deviceId) {
+      await Promise.race([
+        unregisterForPush(deviceId),
+        new Promise((resolve) => setTimeout(resolve, LOGOUT_PUSH_TIMEOUT_MS)),
+      ]);
+      await pushDeviceStore.clear();
+    }
     await tokenStorage.clear();
     setPrincipal(null);
     setStatus('unauthenticated');

@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
 from fastapi import FastAPI, Request
@@ -29,6 +30,7 @@ from app.core.errors import (
     message_for,
 )
 from app.core.logging import configure_logging, get_logger
+from app.realtime.runtime import build_runtime, set_runtime
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -38,6 +40,44 @@ logger = get_logger("mahaa.app")
 #: argument, so a service-layer log line can carry it without every signature
 #: growing a request_id parameter.
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Start and stop the realtime runtime around the application.
+
+    Wiring it here rather than at import time means the hub exists for the whole
+    life of the process and is closed deterministically on shutdown, instead of
+    surviving a reload as a stale module global.
+
+    A realtime failure must not stop the HTTP service from serving: the runtime
+    is built and started inside a ``try`` that logs and continues. Losing realtime
+    degrades the product; refusing to boot loses all of it.
+    """
+    runtime = None
+    try:
+        runtime = build_runtime()
+        set_runtime(runtime)
+        await runtime.start()
+    except Exception as exc:  # noqa: BLE001 - never block startup on realtime
+        logger.error(
+            "realtime runtime failed to start",
+            extra={"reason": type(exc).__name__},
+        )
+        set_runtime(None)
+        runtime = None
+    try:
+        yield
+    finally:
+        if runtime is not None:
+            try:
+                await runtime.stop()
+            except Exception as exc:  # noqa: BLE001 - shutdown is best-effort
+                logger.error(
+                    "realtime runtime failed to stop",
+                    extra={"reason": type(exc).__name__},
+                )
+        set_runtime(None)
 
 
 def create_app() -> FastAPI:
@@ -52,6 +92,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        lifespan=_lifespan,
     )
 
     origins = settings.cors_origin_list

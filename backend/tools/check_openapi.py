@@ -78,6 +78,13 @@ EXPECTED: dict[str, set[str]] = {
     "/api/v1/notifications/unread-count": {"get"},
     "/api/v1/notifications/{notification_id}/read": {"post"},
     "/api/v1/notifications/read-all": {"post"},
+    # push devices (Phase 4) — §13.6. Both authenticated, both owner-scoped, and
+    # **no list route**: the client only ever registers the device it is running
+    # on and removes that one, so a listing would be an endpoint with no caller and
+    # a set of other people's device metadata to leak. The mobile caller does exist
+    # now (`src/api/pushDevices.ts`).
+    "/api/v1/notifications/devices": {"post"},
+    "/api/v1/notifications/devices/{device_id}": {"delete"},
     # media (Phase 7) — §11.2. `/media` returns a *limits document*, not a
     # collection (§11.4 calls that trap out by name), so the entry below is a
     # GET that answers JSON rather than a listing.
@@ -123,7 +130,12 @@ EXPECTED: dict[str, set[str]] = {
 
 #: Substrings that must never appear in a *response* schema. A password field in
 #: a request model is correct and expected; in a response it is a breach.
-FORBIDDEN_IN_RESPONSES = ("password_hash", "jwt_secret", "argon2")
+#:
+#: ``push_token`` is here for §13.6's "never echoed": it is a write-only field, and
+#: ``DeviceRead`` has no place to put it, so a regression that added one would be a
+#: credential leaving the server — which is why this is checked rather than
+#: commented.
+FORBIDDEN_IN_RESPONSES = ("password_hash", "jwt_secret", "argon2", "push_token")
 
 #: Routes reachable without a token. Everything else must declare security.
 PUBLIC_ROUTES = {

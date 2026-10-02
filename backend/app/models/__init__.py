@@ -54,7 +54,7 @@ from app.models.enums import (
 from app.models.experience import Experience
 from app.models.media import STORAGE_KIND_DATABASE, MediaAsset
 from app.models.messaging import Conversation, ConversationMember, Message
-from app.models.notifications import Notification
+from app.models.notifications import Notification, UserDevice
 from app.models.posts import Post, PostMedia
 from app.models.profile import (
     Profile,
@@ -92,6 +92,7 @@ __all__ = [
     "MediaKind",
     "STORAGE_KIND_DATABASE",
     "Notification",
+    "UserDevice",
     "NotificationType",
     "Opportunity",
     "OpportunityRequirement",

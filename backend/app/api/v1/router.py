@@ -17,6 +17,12 @@ Phase 8 added ``stories`` after ``posts``. It is included **after** media becaus
 stories reference `media_assets`, and order here is declaration order only — the
 routes do not shadow each other — so this reads as dependency order for the same
 reason the import list above does.
+
+The realtime transport is mounted last and from a different module
+(``app/api/v1/ws.py``) because it is the only router that is not a collection of
+REST endpoints: it declares a single WebSocket route, and it sits under the same
+``/api/v1`` prefix so the mobile client derives its socket URL from the one base
+address it already has.
 """
 
 from __future__ import annotations
@@ -37,9 +43,11 @@ from app.api.v1.endpoints import (
     stories,
     users,
 )
+from app.api.v1.ws import router as ws_router
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(ws_router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(profile.router)

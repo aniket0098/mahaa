@@ -107,3 +107,44 @@ class UnreadCount(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     count: int = Field(ge=0, description="Notifications the caller has not read.")
+
+
+class DeviceRegistration(BaseModel):
+    """``POST /notifications/devices`` — body is exactly the three fields below.
+
+    **There is no ``user_id``, and ``extra="forbid"`` is what enforces it** —
+    the same rule §13.6 states and that :class:`~app.schemas.messaging.MessageCreate`
+    already applies to its sender. Ownership is the JWT subject, so a field
+    naming somebody else would be a client trying to redirect push delivery to
+    another account; a 422 is a clearer answer than silently ignoring it.
+
+    ``push_token`` is a credential, so it is deliberately write-only: it appears
+    here and in no response model.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    push_token: str = Field(min_length=1, max_length=512)
+    #: §14.13's two values. Not an enum, matching the rest of the project's
+    #: vocabularies, so adding a platform is a constraint change rather than a
+    #: client release.
+    platform: str = Field(pattern=r"^(android|ios)$")
+    device_name: str | None = Field(default=None, max_length=120)
+
+
+class DeviceRead(BaseModel):
+    """One registered device.
+
+    **Deliberately cannot express ``push_token``.** §13.6 says the token is never
+    echoed, and the strongest way to keep that true is a response class with no
+    field for it — there is nothing to leak even if a future handler is careless.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    platform: str
+    device_name: str | None
+    is_active: bool
+    created_at: str
+    last_seen_at: str | None

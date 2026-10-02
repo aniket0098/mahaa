@@ -47,4 +47,17 @@ module.exports = {
       },
     ],
   ],
+  // EAS project identity. Declared here rather than in `app.json` for the same
+  // reason `CLEAR_TEXT_PLUGIN` is handled above: this file is the single source of
+  // truth for anything that depends on the build context, and the project id is
+  // what `expo-notifications` reads to mint a push token (§13.7). The nested
+  // spreads mean a future `extra.eas` field in `app.json` — or any unrelated
+  // `extra` entry — survives instead of being clobbered by this one.
+  extra: {
+    ...(appJson.expo.extra ?? {}),
+    eas: {
+      ...(appJson.expo.extra?.eas ?? {}),
+      projectId: '07f2ef61-64df-4a4b-9d09-beec0d2c5115',
+    },
+  },
 };

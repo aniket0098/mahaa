@@ -37,11 +37,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import ApiError, ErrorCode, error_detail
-from app.models import Connection, User
+from app.models import Connection, Notification, User
 from app.models.enums import ConnectionStatus, NotificationType
+from app.realtime import notification_events
 from app.schemas.connections import ConnectionRead, ConnectionStatusFilter
 from app.schemas.users import UserSummary
-from app.services import notifications
+from app.services import notifications, push
 from app.services.ownership import parse_id
 
 #: The one status the client's enum has that the database does not. ``canceled`` is
@@ -250,7 +251,7 @@ def _persist(
     session: Session,
     row: Connection,
     viewer: User,
-    notify: Callable[[Connection], None] | None = None,
+    notify: Callable[[Connection], Notification] | None = None,
 ) -> ConnectionRead:
     """Commit a new or revived row, and answer with it.
 
@@ -273,13 +274,21 @@ def _persist(
     session.add(row)
     try:
         session.flush()
-        if notify is not None:
-            notify(row)
+        notification = notify(row) if notify is not None else None
         session.commit()
     except IntegrityError as exc:
         session.rollback()
         raise _already_connected() from exc
     session.refresh(row)
+    # Phase 3 realtime: the commit above returned, so the connection row and its
+    # notification are both durable. Publishing any earlier would announce a row a
+    # rollback could still erase — and the IntegrityError arm above, which raises,
+    # reaches neither this line nor the publisher.
+    if notification is not None:
+        notification_events.publish_for(notification)
+        # Phase 4 push: after the commit and after the socket, so a backgrounded
+        # recipient is reached by the fallback path only.
+        push.dispatch(session, notification)
     return connection_read(row, viewer)
 
 
@@ -302,7 +311,7 @@ def _find_pair(session: Session, one: uuid.UUID, two: uuid.UUID) -> Connection |
 
 def _request_notifier(
     session: Session, recipient_id: uuid.UUID, requester: User
-) -> Callable[[Connection], None]:
+) -> Callable[[Connection], Notification]:
     """Build the ``connection_request`` side effect for one send.
 
     A closure rather than a helper with eight arguments, because the two
@@ -310,10 +319,13 @@ def _request_notifier(
     recipient is the **addressee**, determined by the state machine, and the actor
     is the authenticated requester — neither is ever a request field, so neither
     can be spoofed.
+
+    Returns the staged ``Notification`` so the caller can publish it *after* its
+    commit; see ``realtime/notification_events.py``.
     """
 
-    def notify(row: Connection) -> None:
-        notifications.emit(
+    def notify(row: Connection) -> Notification:
+        return notifications.emit(
             session,
             recipient_id=recipient_id,
             notification_type=NotificationType.CONNECTION_REQUEST,
@@ -331,7 +343,7 @@ def _request_notifier(
 
 def _accepted_notifier(
     session: Session, recipient_id: uuid.UUID, accepter: User
-) -> Callable[[Connection], None]:
+) -> Callable[[Connection], Notification]:
     """Build §6.3's ``connection_accepted`` side effect for one accept.
 
     The recipient is the **requester** — the person who asked — and the actor is
@@ -340,8 +352,8 @@ def _accepted_notifier(
     other's action.
     """
 
-    def notify(row: Connection) -> None:
-        notifications.emit(
+    def notify(row: Connection) -> Notification:
+        return notifications.emit(
             session,
             recipient_id=recipient_id,
             notification_type=NotificationType.CONNECTION_ACCEPTED,
@@ -430,7 +442,7 @@ def _move_to(
     viewer: User,
     target: ConnectionStatus,
     verb: str,
-    notify: Callable[[Connection], None] | None = None,
+    notify: Callable[[Connection], Notification] | None = None,
 ) -> ConnectionRead:
     """Settle a pending request into ``target``.
 
@@ -452,10 +464,15 @@ def _move_to(
     # Staged before this commit for the same reason as `_persist`: the status
     # change and its notification land together or not at all. The early return
     # above is what keeps a repeated accept from notifying twice.
-    if notify is not None:
-        notify(row)
+    notification = notify(row) if notify is not None else None
     session.commit()
     session.refresh(row)
+    # Phase 3 realtime: after the commit, so a rollback leaves no event. The early
+    # return above publishes nothing, so a repeated accept notifies once.
+    if notification is not None:
+        notification_events.publish_for(notification)
+        # Phase 4 push: same placement — after the commit, after the socket.
+        push.dispatch(session, notification)
     return connection_read(row, viewer)
 
 

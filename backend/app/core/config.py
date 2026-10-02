@@ -97,6 +97,41 @@ class Settings(BaseSettings):
     jwt_issuer: str = Field(default="mahaa-api")
     jwt_audience: str = Field(default="mahaa-mobile")
 
+    # --- realtime ------------------------------------------------------------
+    #: Cross-instance event fan-out. Optional by design: the realtime hub works
+    #: without it, and so does every REST route. Only a *multi-instance*
+    #: deployment needs it, because an in-process hub cannot reach a socket held
+    #: by a different Render instance.
+    #:
+    #: Empty means "no Redis configured", which is a supported state — never a
+    #: placeholder that production might silently boot against, and never a
+    #: default that would have to be overridden. The realtime subsystem reports
+    #: fan-out as unavailable rather than pretending it works.
+    redis_url: str = ""
+
+    #: Master switch for the realtime subsystem. `REALTIME_ENABLED=false` keeps
+    #: ``/api/v1/ws`` refusing connections with a clear, honest error instead of
+    #: accepting sockets it cannot fan out to.
+    realtime_enabled: bool = True
+
+    #: Seconds between heartbeat pings on an idle socket, and how long to wait for
+    #: the matching pong before the connection is declared dead.
+    realtime_heartbeat_seconds: int = Field(default=25, ge=5)
+    realtime_heartbeat_timeout_seconds: int = Field(default=10, ge=1)
+
+    #: Bounded cap on concurrent sockets per process, so one client cannot open
+    #: connections until the instance runs out of memory.
+    realtime_max_connections: int = Field(default=1000, ge=1)
+
+    #: Expo Push Service access token (§13.5). Optional by design: a deployment
+    #: without one still creates notifications and still delivers them over the
+    #: WebSocket, and `services/push.py` logs a sanitised warning and skips. There
+    #: is deliberately no default and no placeholder — a wrong value would fail
+    #: every push silently rather than loudly, and an empty string is the honest
+    #: representation of "not configured". Server-side only: it is read here and
+    #: never crosses an API boundary.
+    expo_access_token: str = ""
+
     # --- rate limiting ------------------------------------------------------
     #: Auth-endpoint limits, per client IP, per fixed window. `0` disables the
     #: limiter entirely, which is how the test suite keeps a fast run from

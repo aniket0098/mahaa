@@ -961,6 +961,8 @@ quality). Documented deliberately, not designed further.
 | `POST /notifications/{id}/read` | **[F]** | |
 | `POST /notifications/read-all` | **[F]** | |
 | Unread **count** | **[F]** | |
+| `POST /notifications/devices` | **[F]** | Register a push device. §13.6 |
+| `DELETE /notifications/devices/{device_id}` | **[F]** | Remove one. §13.6 |
 
 > **Constraint the client has already imposed on itself.** The app shows **no
 > unread badge, dot, or count anywhere** — `DashboardHeader.tsx` says the bell
@@ -968,6 +970,11 @@ quality). Documented deliberately, not designed further.
 > and a badge would be a number the server cannot supply". A count endpoint must
 > be built **before** any badge is drawn. Shipping the list without a count keeps
 > the client's current honesty intact.
+
+> **No device-list endpoint in V1.** The client needs `register` and `remove`
+> and nothing else; administrative device management is out of scope. Adding
+> `GET /notifications/devices` would expose every token a user has registered,
+> which is a credential inventory with no consumer.
 
 ### 13.1 Types, and which the platform can actually produce
 
@@ -1009,6 +1016,156 @@ points at a row that may later be deleted. Recommended retention 90 days, remove
 by a periodic job. Do **not** cascade-delete notifications when the actor's
 content is deleted — the recipient still needs to know something happened, with
 `actor` rendered as null/anonymous.
+
+### 13.5 Push delivery, provider and payload
+
+A WebSocket only reaches a running app. When the application is backgrounded or
+killed, the socket is gone and nothing is delivered, so the recipient learns of a
+connection request or a message only when they next open the app. **Push is the
+transport that covers that gap**, and it is a transport like any other: the
+notification row in PostgreSQL remains the record, and push is one way of telling
+a device about it.
+
+```text
+Business operation
+        ↓
+notification row created          (existing behaviour — §13)
+        ↓
+DB COMMIT
+        ↓
+notification.created
+        ├── WebSocket          → foreground app
+        └── Push service       → background / killed app
+```
+
+**Provider: Expo Push Service for V1.** The mobile application is already Expo
+(§0), so this needs no Firebase native configuration inside the app and no
+service-account JSON in the repository. The backend remains responsible for
+delivery, and the provider sits behind a service abstraction
+(`app/services/push.py`) so a later swap to FCM changes one module rather than
+every caller. **Direct FCM is not part of V1.**
+
+**Push failure must never roll back notification persistence.** The row is
+committed before any provider call, and a failed delivery is logged and
+abandoned — a device that cannot be reached is not a reason to un-store a
+notification the user is owed. Delivery is best-effort by design, and REST
+remains authoritative either way.
+
+**Push payload — identifiers only:**
+
+```json
+{
+  "notification_id": "<notification id>",
+  "type": "<notification type>",
+  "target_type": "<target type or null>",
+  "target_id": "<target id or null>"
+}
+```
+
+This is what appears in the push payload, and deliberately not more: no
+`password`, `JWT`, `access_token`, database URL, Redis URL, LiveKit credentials,
+device credentials, private profile data, or message text. The client resolves
+what it needs with the authenticated REST APIs it already has, using
+`notification_id` as the key — so a push payload is a pointer, never a source of
+truth.
+
+**Message text MUST NOT appear in a V1 push payload.** A push notification is
+rendered on a locked screen by anyone holding the phone, so a message body
+delivered this way is disclosed to whoever is nearby. For `message`, the tray
+shows a generic **"New message"**; the text is fetched over authenticated REST
+once the app is unlocked. §13.2's `body` is a *stored* field for the in-app
+screen and is not what push may carry.
+
+**Notification types are unchanged by push.** The registry stays
+`{connection_request, connection_accepted, message, system}` (§13.1). Push is a
+delivery path, not a new kind of notification, so it adds no type.
+
+**Foreground and background are separate paths and must not double-notify.**
+While the app is running, `notification.created` over the WebSocket updates the
+notification cache and is what the UI renders from; a push for the same event is
+suppressed while the app is in the foreground. Push replaces neither the
+WebSocket nor REST — a user with push working and the socket dead must still get
+the notification, and a user with the socket live must not see it twice.
+
+**Push-token lifecycle.** On an authenticated session the client requests
+notification permission, obtains an Expo push token, and registers it through
+`POST /notifications/devices`. The server associates it with the caller. On
+logout the client removes the registration via
+`DELETE /notifications/devices/{device_id}`. **A token becoming invalid never
+invalidates the account or the session** — it is device metadata, and the worst
+case of losing it is that one device stops receiving pushes.
+
+**Invalid provider tokens.** If Expo reports a token as `DeviceNotRegistered` or
+otherwise invalid, the implementation **marks that registration inactive**
+(`is_active = false`, §14.13) rather than deleting the row, so a token that
+later becomes valid again is not lost. The user's account is untouched, other
+devices are unaffected, and one bad token never blocks delivery to the rest. **No
+retry queue in V1** — a failed push is logged and dropped, and the notification
+is still in PostgreSQL for the next fetch.
+
+**Provider credentials are server-side only.** They are configuration on the
+backend, set the way `JWT_SECRET` and `DATABASE_URL` are. They are never
+hard-coded, never committed, never placed in the mobile bundle, never logged,
+and never returned through any API.
+
+**No job queue.** This specification defines no Celery, RabbitMQ, Kafka, or any
+other distributed job system, and V1 must not introduce one for push. Delivery
+sits behind `app/services/push.py` and is invoked after the commit, exactly as
+`notification.created` is; the module must not block or fail notification
+persistence.
+
+### 13.6 Device registration
+
+Two endpoints, both authenticated, both derived from the token:
+
+```http
+POST /notifications/devices
+{ "push_token": "ExponentPushToken[…]", "platform": "android", "device_name": "Pixel 8" }
+```
+
+```http
+DELETE /notifications/devices/{device_id}
+```
+
+**Ownership is the JWT subject, always.** The request body has **no `user_id`**
+and `extra="forbid"` turns an attempt to supply one into a 422 rather than a
+silently ignored key — the same rule §4 applies to `MessageCreate`. A device
+belonging to another account is a **404**, not a 403, matching §16's
+anti-enumeration rule and the `notifications/{id}/read` convention above.
+
+**Registration is idempotent.** The same authenticated user re-registering the
+same push token updates the existing row (§14.13's uniqueness constraint) and
+returns it; it does not create a second device. A token is a *credential*, so it
+is never echoed in a response body — the registration returns the device's `id`,
+`platform` and `device_name` and nothing more.
+
+### 13.7 Mobile contract, and the Phase 4A boundary
+
+The mobile implementation of §13.5 and §13.6 will:
+
+1. install `expo-notifications`;
+2. request notification permission at a sensible point, not on every render, and
+   continue normally when it is denied;
+3. create an Android notification channel with safe defaults — a name, default
+   importance, no aggressive sound or vibration;
+4. obtain an Expo push token;
+5. `POST /notifications/devices` to register it;
+6. `DELETE /notifications/devices/{device_id}` at logout where the lifecycle
+   supports it;
+7. handle a notification tap by routing to the notification or conversation
+   screen that exists — **and only to one that exists.** `notifications.tsx` and
+   `messages.tsx` are `StageScreen` notices today, so a tap falls back to the
+   notifications screen rather than inventing a route;
+8. keep the existing WebSocket realtime system untouched. Push is added beside
+   it, never over it.
+
+`POST_NOTIFICATIONS` is the only permission this needs. `CAMERA` and `RECORD_AUDIO`
+belong to §8's calls and are **not** requested here.
+
+> **Phase 4A defines the contract only.** The sections above are the decision
+> record that unblocks Phase 4. **No migration, application code, mobile code,
+> provider configuration, or production database change occurs during Phase 4A.**
+> `user_devices` (§14.13) is specified, not created.
 
 owner id — the server derives it from the token.
 
@@ -1269,6 +1426,32 @@ NOT NULL` · `slug text UNIQUE NOT NULL` · `opportunity_type text NOT NULL` CHE
 (4 values) · `status text NOT NULL` · `visibility text NOT NULL` ·
 `description` · `responsibilities` · `requirements_text` · `work_mode` CHECK (3) ·
 `location` · `employment_type` CHECK (4) · `comp_min` · `comp_max` ·
+---
+
+### 14.13 Push devices
+
+**`user_devices`** — `id` PK · `user_id` FK users CASCADE (the owner) ·
+`push_token text NOT NULL` · `platform text NOT NULL` CHECK in (android, ios) ·
+`device_name text NULL` · `is_active bool NOT NULL` DEFAULT true · `created_at` ·
+`updated_at` · `last_seen_at timestamptz NULL`.
+
+**Unique `(user_id, push_token)`.** A token is a credential, so re-registering one
+on an authenticated session must update the existing row rather than accumulate
+duplicates (§13.6). Index on `(user_id, is_active)` for the per-user lookup that
+delivery performs.
+
+`platform` is a two-value CHECK and not a PostgreSQL ENUM, matching every other
+vocabulary in this document: `android` is what the current client uses, and `ios`
+keeps the model honest if the app ships there without a schema change.
+
+`CASCADE` on `user_id` matches every other user-owned table here (`profiles`,
+`connections`, `user_skills`): the registration is part of the account and has no
+meaning once the account is gone.
+
+`is_active` and `last_seen_at` exist so an invalidated provider token is
+**disabled, not deleted** (§13.5) — a transient provider error must not destroy a
+registration the user will need again.
+
 ---
 
 ## 15. API conventions
@@ -1535,6 +1718,32 @@ already correct, so the work is additive.
   `iss`/`aud`, algorithm pinned. Reject `alg: none` and any unexpected family.
 - **Refresh token strategy** — decided in §4.8; if rotation is chosen, add reuse
   detection via `family_id`.
+
+### 20.3 Push and device registration
+
+- **Device registration requires authentication.** `POST /notifications/devices`
+  is behind `CurrentUser` like every other protected route (§13.6).
+- **Ownership comes from the JWT subject.** The request body has no `user_id`,
+  and `extra="forbid"` makes an attempt to supply one a 422 rather than a
+  silently dropped field — the same rule §4 applies to `MessageCreate`.
+- **A client cannot assign a device to another user**, and cannot delete one:
+  another account's device is a **404**, not a 403 (§13.6, §16).
+- **Push tokens are credentials.** A device token is stored like a password hash
+  is treated like a password — never logged, never returned in a response body,
+  never included in an error detail. `user_devices.push_token` is the one column
+  whose value must never reach a log line.
+- **Provider credentials never reach the mobile application.** Expo access
+  details are server-side configuration, exactly like `JWT_SECRET` and
+  `DATABASE_URL`: set in the environment, never committed, never bundled, never
+  logged, never returned through an API.
+- **Push payloads carry the minimum.** `notification_id`, `type`, `target_type`,
+  `target_id` — nothing else. A push payload is a pointer resolved over
+  authenticated REST, never a copy of server state (§13.5).
+- **Message text is excluded from push payloads**, so private conversation
+  content cannot be disclosed on a lock screen (§13.5).
+- **The notification row remains authoritative.** Push is a transport; losing a
+  push must not lose a notification, and a failed push must not roll back the
+  write that produced it (§13.5).
 ---
 
 ## 21. Testing strategy
@@ -1785,6 +1994,7 @@ call in `src/api/`, or `—` where the mobile app has no caller.
 | Messaging | — | `/conversations`, `/messages` | No | **[F]** | No client module, no WebSocket (§7) |
 | Calls | — | `/calls` | No | **[F]** | No LiveKit SDK, no call screen (§8) |
 | Notifications | — | `/notifications` | No | **[F]** | `StageScreen`; no badge anywhere |
+| Push devices | `pushDevices` | `/notifications/devices` | **Yes** | **Yes** | Phase 4. `src/api/pushDevices.ts`; permission → token → register on authenticated start, unregister on logout |
 
 **Totals: 2 routes exist; 76 are proposed; 12 of those have no mobile caller
 today** — logout, refresh, verify-email, profile links, connections
