@@ -31,12 +31,15 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth,
+    companies,
     connections,
     health,
+    institutions,
     media,
     messaging,
     notifications,
     onboarding,
+    opportunities,
     posts,
     profile,
     skills,
@@ -59,3 +62,11 @@ api_router.include_router(posts.router)
 api_router.include_router(stories.router)
 api_router.include_router(skills.router)
 api_router.include_router(onboarding.router)
+
+# Phase 9's career domain. ``companies`` is included before ``opportunities``
+# because every opportunity row points at a company; order is declaration order
+# only, as everywhere else in this file. ``institutions`` joins them here — §1906
+# assigns it to Phase 9 alongside companies, and it is independent of both.
+api_router.include_router(companies.router)
+api_router.include_router(opportunities.router)
+api_router.include_router(institutions.router)

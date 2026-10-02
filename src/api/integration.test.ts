@@ -62,6 +62,7 @@ const { login, signup, fetchPrincipal } = await import('@/api/auth');
 const profileApi = await import('@/api/profile');
 const resumesApi = await import('@/api/resumes');
 const companyApi = await import('@/api/company');
+const institutionsApi = await import('@/api/institutions');
 const { tokenStorage } = await import('@/auth/tokenStorage');
 const { homePathForRole } = await import('@/auth/roleHome');
 
@@ -111,15 +112,26 @@ const EMAIL_DOMAIN = process.env.INTEGRATION_EMAIL_DOMAIN ?? 'example.com';
 
 const CANDIDATE = { name: 'Integration Candidate', email: `cand.${runId}@${EMAIL_DOMAIN}` };
 const EMPLOYER = { name: 'Integration Employer', email: `emp.${runId}@${EMAIL_DOMAIN}` };
+const COLLEGE = { name: 'Integration College', email: `col.${runId}@${EMAIL_DOMAIN}` };
+const OTHER_COLLEGE = {
+  name: 'Other Integration College',
+  email: `col2.${runId}@${EMAIL_DOMAIN}`,
+};
 
 let candidateToken = '';
 let employerToken = '';
+let collegeToken = '';
+let otherCollegeToken = '';
 
 beforeAll(async () => {
   if (!reachable) return;
   candidateToken = (await signup({ ...CANDIDATE, password: PASSWORD, role: 'candidate' }))
     .access_token;
   employerToken = (await signup({ ...EMPLOYER, password: PASSWORD, role: 'employer' })).access_token;
+  collegeToken = (await signup({ ...COLLEGE, password: PASSWORD, role: 'college' })).access_token;
+  otherCollegeToken = (
+    await signup({ ...OTHER_COLLEGE, password: PASSWORD, role: 'college' })
+  ).access_token;
 });
 
 describe.skipIf(!reachable)('Phase A — authentication', () => {
@@ -466,6 +478,130 @@ describe.skipIf(!reachable)('Phase C — employer data and permissions', () => {
     );
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiErrorInstance).status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe.skipIf(!reachable)('Phase C2 — college institution workspace', () => {
+  let institutionId = '';
+  let programId = '';
+
+  it('starts with no institutions', async () => {
+    const mine = await asRole(collegeToken, () => institutionsApi.fetchMyInstitutions());
+    expect(Array.isArray(mine)).toBe(true);
+    expect(mine).toHaveLength(0);
+  });
+
+  it('creates an institution and becomes its owner', async () => {
+    // `MyInstitutionSummary` is the institution plus a real program COUNT.
+    const created = await asRole(collegeToken, () =>
+      institutionsApi.createInstitution({ name: `Integration College ${runId}` }),
+    );
+    institutionId = created.institution.id;
+    expect(created.institution.name).toBe(`Integration College ${runId}`);
+    expect(created.institution.slug).toBeTruthy(); // Server-owned.
+    expect(created.institution.verification_status).toBe('unverified');
+    // §14.9: `owner_id` is the caller's own id, derived from the token.
+    expect(created.program_count).toBe(0);
+
+    const mine = await asRole(collegeToken, () => institutionsApi.fetchMyInstitutions());
+    expect(mine.some((item) => item.institution.id === institutionId)).toBe(true);
+  });
+
+  it('reads and updates the institution profile', async () => {
+    const fetched = await asRole(collegeToken, () =>
+      institutionsApi.fetchInstitution(institutionId),
+    );
+    expect(fetched.id).toBe(institutionId);
+
+    const updated = await asRole(collegeToken, () =>
+      institutionsApi.updateInstitution(institutionId, {
+        description: 'Updated by the integration suite.',
+      }),
+    );
+    expect(updated.description).toBe('Updated by the integration suite.');
+    // A patch that omits a field leaves it alone.
+    expect(updated.name).toBe(`Integration College ${runId}`);
+  });
+
+  it('adds programs and reports a real program count', async () => {
+    const created = await asRole(collegeToken, () =>
+      institutionsApi.createProgram(institutionId, {
+        name: 'B.Tech',
+        level: 'undergraduate',
+        description: 'Four years.',
+      }),
+    );
+    programId = created.id;
+    expect(created.institution_id).toBe(institutionId);
+    expect(created.level).toBe('undergraduate');
+
+    const programs = await asRole(collegeToken, () =>
+      institutionsApi.listPrograms(institutionId),
+    );
+    expect(programs.some((program) => program.id === programId)).toBe(true);
+
+    // `program_count` must track the table, not a number the client remembers.
+    const mine = await asRole(collegeToken, () => institutionsApi.fetchMyInstitutions());
+    expect(mine.find((item) => item.institution.id === institutionId)?.program_count).toBe(1);
+
+    const renamed = await asRole(collegeToken, () =>
+      institutionsApi.updateProgram(institutionId, programId, { name: 'B.Tech CS' }),
+    );
+    expect(renamed.name).toBe('B.Tech CS');
+  });
+
+  it('requests verification and never claims a college is verified', async () => {
+    const status = await asRole(collegeToken, () =>
+      institutionsApi.requestInstitutionVerification(institutionId),
+    );
+    expect(status.verification_status).toBe('pending');
+    expect(status.note).toBeTruthy();
+
+    const fetched = await asRole(collegeToken, () =>
+      institutionsApi.fetchInstitution(institutionId),
+    );
+    expect(fetched.verification_status).toBe('pending');
+  });
+
+  it('refuses a non-owner access to someone else’s institution', async () => {
+    // §12.3: owner-scoped, so 404 for anybody else — never 403, because the
+    // institution's existence is not public and a 403 would confirm it.
+    const error = await asRole(otherCollegeToken, () =>
+      institutionsApi.fetchInstitution(institutionId).catch((cause: unknown) => cause),
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiErrorInstance).status).toBe(404);
+  });
+
+  it('refuses a candidate access to a college institution', async () => {
+    const error = await asRole(candidateToken, () =>
+      institutionsApi.fetchInstitution(institutionId).catch((cause: unknown) => cause),
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiErrorInstance).status).toBe(404);
+  });
+
+  it('refuses a non-owner from listing or adding programs', async () => {
+    const listed = await asRole(otherCollegeToken, () =>
+      institutionsApi.listPrograms(institutionId).catch((cause: unknown) => cause),
+    );
+    expect((listed as ApiErrorInstance).status).toBe(404);
+
+    const added = await asRole(otherCollegeToken, () =>
+      institutionsApi
+        .createProgram(institutionId, { name: 'Trespass' })
+        .catch((cause: unknown) => cause),
+    );
+    expect((added as ApiErrorInstance).status).toBe(404);
+  });
+
+  it('deletes the program it created', async () => {
+    await asRole(collegeToken, () => institutionsApi.deleteProgram(institutionId, programId));
+
+    const programs = await asRole(collegeToken, () =>
+      institutionsApi.listPrograms(institutionId),
+    );
+    expect(programs.some((program) => program.id === programId)).toBe(false);
   });
 });
 

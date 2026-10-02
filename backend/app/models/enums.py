@@ -318,6 +318,27 @@ class CompanyStatus(StrEnum):
     INACTIVE = "inactive"
 
 
+class InstitutionStatus(StrEnum):
+    """``institutions.status`` — §14.9 names the column but not its vocabulary.
+
+    **The same gap, and the same resolution, as :class:`CompanyStatus`.** §14.9 says
+    institutions are "as `companies`", which fixes the *column* but not what may go in
+    it, and §12.3 has no lifecycle prose for an institution either. So the two states
+    that actually have to be distinguishable — a workspace its owner is administering,
+    and one that is retired — get names, and nothing else is invented.
+
+    A **separate** enum rather than reusing ``CompanyStatus``: the values are the same
+    but the column belongs to a different table, and reusing the vocabulary would
+    produce a constraint literally named ``ck_institutions_company_status``, which
+    reads as a copy-paste bug in the schema forever. The naming convention derives
+    constraint names from the table, so a distinct enum is what yields
+    ``ck_institutions_status``.
+    """
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
 class CompanyMemberRole(StrEnum):
     """``company_members.role`` — §14.9's 5 values.
 

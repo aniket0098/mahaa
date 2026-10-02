@@ -17,8 +17,10 @@ from app.models.achievements import Achievement
 from app.models.career import (
     Company,
     CompanyMember,
+    Institution,
     Opportunity,
     OpportunityRequirement,
+    Program,
 )
 from app.models.certifications import Certification
 from app.models.connections import Connection
@@ -33,6 +35,7 @@ from app.models.enums import (
     ConnectionStatus,
     EducationLevel,
     EmploymentType,
+    InstitutionStatus,
     MediaKind,
     NotificationType,
     OpportunityStatus,
@@ -87,6 +90,8 @@ __all__ = [
     "EducationLevel",
     "EmploymentType",
     "Experience",
+    "Institution",
+    "InstitutionStatus",
     "Message",
     "MediaAsset",
     "MediaKind",
@@ -108,6 +113,7 @@ __all__ = [
     "ProfilePreferences",
     "ProfilePrivacy",
     "ProfileVisibility",
+    "Program",
     "Project",
     "ProjectSkill",
     "RequirementKind",

@@ -27,6 +27,7 @@ from app.models.enums import (
     CompanyStatus,
     CompPeriod,
     EmploymentType,
+    InstitutionStatus,
     OpportunityStatus,
     OpportunityType,
     OpportunityVisibility,
@@ -315,3 +316,125 @@ class OpportunityRequirement(UUIDPrimaryKeyMixin, Base):
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="requirements")
     skill: Mapped["Skill"] = relationship(lazy="joined")  # noqa: F821
+
+
+class Institution(UUIDPrimaryKeyMixin, Base):
+    """A college workspace — §14.9: "as `companies`, plus `owner_id`".
+
+    **The one structural difference from :class:`Company`, and it is the whole point
+    of this table.** A company has no ``owner_id``: ownership lives in
+    ``company_members`` as a row with ``role='owner'``, so a company can have an owner
+    *and* admins and recruiters. §12.3 makes **every** institution route
+    ownership-scoped to one contact person, so institutions have no membership table
+    and the owner is a plain column.
+
+    **``owner_id`` is RESTRICT**, per §14.9. An institution is the workspace of a real
+    person; deleting that person must not silently delete a college's public record
+    along with every program attached to it. ``programs`` cascade from *here* instead.
+
+    **``slug`` is server-generated and immutable**, exactly as for companies: §12.3
+    calls it server-owned and it is absent from the update schema.
+
+    **``industry`` and ``company_size`` are carried because §14.9 says "as
+    `companies`".** Neither appears in ``src/types/onboarding.ts``, so neither is on
+    the wire and neither is writable today — they are storage, not contract. They are
+    here so the table matches §14.9 literally rather than being a quietly narrower
+    shape that would need a second migration the first time a client reads them.
+    """
+
+    __tablename__ = "institutions"
+    __table_args__ = (
+        # Mirrors ``companies``; §14.9 specifies no separate CHECK for institutions.
+        CheckConstraint("btrim(name) <> ''", name="name_not_blank"),
+        # Every single route is filtered by ``owner_id`` (§12.3), so this is not an
+        # optimisation, it is the index the whole table is read through.
+        Index("ix_institutions_owner_id", "owner_id"),
+        Index("ix_institutions_status", "status"),
+    )
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    #: Server-generated and never writable. See the class docstring.
+    slug: Mapped[str] = mapped_column(String(220), nullable=False, unique=True)
+    website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: §14.9's "as companies" — storage only; see the class docstring.
+    industry: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: §14.9's "as companies" — storage only; see the class docstring.
+    company_size: Mapped[CompanySize | None] = mapped_column(
+        pg_enum(CompanySize, "company_size"), nullable=True
+    )
+    location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: §14.11's reference check: an asset a reachable institution shows must not be
+    #: deletable out from under it, same rule as ``companies.logo_media_id``.
+    logo_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True
+    )
+    #: §12.3: server-owned, absent from every write schema.
+    verification_status: Mapped[VerificationStatus] = mapped_column(
+        pg_enum(VerificationStatus, "verification_status"),
+        nullable=False,
+        server_default=VerificationStatus.UNVERIFIED.value,
+    )
+    status: Mapped[InstitutionStatus] = mapped_column(
+        pg_enum(InstitutionStatus, "status"),
+        nullable=False,
+        server_default=InstitutionStatus.ACTIVE.value,
+    )
+    #: §14.9: the registering contact person. NOT NULL — an institution with no owner
+    #: would have no route that could ever reach it.
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    owner: Mapped["User"] = relationship(lazy="joined")  # noqa: F821
+    programs: Mapped[list["Program"]] = relationship(
+        back_populates="institution", cascade="all, delete-orphan"
+    )
+
+
+class Program(UUIDPrimaryKeyMixin, Base):
+    """One course or degree an institution offers — §14.9.
+
+    **``program_count`` is not a column.** §14.9 says so outright — "a live `COUNT`,
+    not a column" — because a denormalised counter is wrong the moment a program is
+    added or removed outside the one screen that maintains it. The service counts.
+
+    ``institution_id`` is **CASCADE**, unlike ``institutions.owner_id``: a program has
+    no meaning without the institution that offers it, so deleting the workspace
+    takes its programs with it rather than orphaning them.
+    """
+
+    __tablename__ = "programs"
+    __table_args__ = (
+        # §14.9 names this index explicitly; it is also the only query path.
+        Index("ix_programs_institution_id", "institution_id"),
+    )
+
+    institution_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Free text, not a level enum: §14.9 says "``level`` text NULL" and the client
+    #: type is ``string | null``.
+    level: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    institution: Mapped[Institution] = relationship(back_populates="programs")
