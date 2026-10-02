@@ -188,11 +188,24 @@ describe('eas.json build profiles — no LAN override on a physical device', () 
     );
   }
 
-  it('blanks the LAN variable in both cloud profiles', () => {
-    // The empty string is the whole mechanism: an absent key would be indistinguishable
-    // from "not configured", and a real address here would be compiled into the APK.
+  it('supplies a non-address LAN sentinel in both cloud profiles', () => {
+    // EAS rejects an empty env value outright ("not allowed to be empty"), so the
+    // sentinel has to be a non-empty string. `"disabled"` is chosen because it is
+    // not a URL at all: `LAN_HOST` only matches a private IPv4 literal, so the
+    // resolver treats it as "no LAN value supplied" and falls through to the shared
+    // production URL. What matters is that the value cannot be a reachable LAN
+    // address, so this asserts the guarantee rather than the literal — a future
+    // edit to another unusable-but-non-empty sentinel stays correct.
     for (const profile of ['preview', 'production']) {
-      expect(buildProfiles()[profile]?.env?.EXPO_PUBLIC_API_BASE_URL_LAN, profile).toBe('');
+      const lan = buildProfiles()[profile]?.env?.EXPO_PUBLIC_API_BASE_URL_LAN ?? '';
+      expect(lan, profile).not.toBe('');
+      expect(lan, profile).not.toMatch(/^https?:\/\//i);
+      // The decisive check is behavioural, and lives in the tests below: the
+      // resolver's LAN guard only accepts a private IPv4 literal, so this value
+      // can never produce a `lan-override`. Asserting it through
+      // `resolveApiBaseUrl` keeps this file from reaching into a private regex
+      // constant in `apiBaseUrl.ts`.
+      expect(resolveAsPhysicalDevice(profile).source, profile).not.toBe('lan-override');
     }
   });
 
