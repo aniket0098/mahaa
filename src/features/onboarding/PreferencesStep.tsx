@@ -12,7 +12,7 @@
  */
 
 import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pressable, View } from 'react-native';
 
 import { ApiError, fieldErrors } from '@/api/errors';
@@ -32,6 +32,11 @@ import {
   WORK_MODES,
   stepStyles,
 } from '@/features/onboarding/onboardingStyles';
+import {
+  isPreferencesUnconfigured,
+  preferencesLoadBanner,
+  storedPreferences,
+} from '@/features/onboarding/preferencesState';
 import type { WorkMode } from '@/types/profile';
 
 const WORK_MODE_VALUES: readonly WorkMode[] = ['remote', 'hybrid', 'onsite'];
@@ -49,6 +54,7 @@ export interface PreferencesStepProps {
 }
 
 export function PreferencesStep({ onNext, busy, canGoBack, onBack }: PreferencesStepProps) {
+  const queryClient = useQueryClient();
   /**
    * `null` means "not edited yet", which is distinct from `[]` (deliberately cleared).
    * That distinction matters because the write is replace-semantics: the first save
@@ -61,8 +67,30 @@ export function PreferencesStep({ onNext, busy, canGoBack, onBack }: Preferences
   const [editedLocations, setLocations] = useState<string[] | null>(null);
   const [locationDraft, setLocationDraft] = useState('');
 
-  const stored = useQuery({ queryKey: queryKeys.preferences, queryFn: fetchPreferences });
-  const saved = stored.data;
+  const stored = useQuery({
+    queryKey: queryKeys.preferences,
+    queryFn: async () => {
+      /*
+       * The server answers 404 with "You have not set your preferences yet."
+       * for an account that has never configured any — a domain state, and the
+       * reason this read exists (the `PUT` below replaces rather than merges, so
+       * the form must know what is already stored before it writes).
+       *
+       * Resolving it to `null` here, rather than in the render, keeps the screen
+       * on its ordinary empty path: no error banner, no Retry that could only
+       * 404 again, and every existing `?? default` below still applying. Only
+       * that one documented answer is absorbed; anything else still throws and
+       * keeps its error-and-retry behaviour (see `preferencesState.ts`).
+       */
+      try {
+        return await fetchPreferences();
+      } catch (error) {
+        if (isPreferencesUnconfigured(error)) return null;
+        throw error;
+      }
+    },
+  });
+  const saved = storedPreferences(stored.data);
 
   // Derived, not synchronised: before the first edit the screen shows the server's
   // values; after it, the person's. No effect, so no cascading render, and no
@@ -87,6 +115,24 @@ export function PreferencesStep({ onNext, busy, canGoBack, onBack }: Preferences
         availability_date: saved?.availability_date ?? null,
         willing_to_relocate: saved?.willing_to_relocate ?? false,
       }),
+    onSuccess: (data) => {
+      /*
+       * Seed the read this screen is drawn from with what the server just
+       * returned, instead of leaving it to refetch. Two things it fixes at once:
+       * the saved state is displayed immediately rather than after a round trip,
+       * and any earlier load error is cleared from this query key, so a
+       * successful save can never leave a stale red banner sitting above a form
+       * that plainly worked.
+       *
+       * `profile` and `onboarding` both read this data — the aggregate renders
+       * the preferences summary and the wizard's completion verdict counts the
+       * section — so both are invalidated or the step would appear saved and the
+       * wizard would still report it outstanding.
+       */
+      queryClient.setQueryData(queryKeys.preferences, data);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.profile });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.onboarding });
+    },
   });
   const errors = fieldErrors(save.error);
 
@@ -95,6 +141,14 @@ export function PreferencesStep({ onNext, busy, canGoBack, onBack }: Preferences
 
   const toggle = <T,>(list: T[], value: T): T[] =>
     list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value];
+
+  /*
+   * The load banner is driven by the message, not by `isError`. An account that
+   * has never set preferences resolves that read to `null` above, so there is no
+   * error to show and the form renders normally; every genuine failure still
+   * produces a message here and keeps its Retry.
+   */
+  const loadBanner = preferencesLoadBanner(stored.error);
 
   const addLocation = () => {
     const value = locationDraft.trim();
@@ -113,12 +167,10 @@ export function PreferencesStep({ onNext, busy, canGoBack, onBack }: Preferences
       busy={busy || save.isPending || stored.isLoading}
       canGoBack={canGoBack}
       onBack={onBack}>
-      {stored.isError ? (
+      {loadBanner ? (
         <StatusBanner
           title="Your saved preferences did not load"
-          description={
-            stored.error instanceof ApiError ? stored.error.message : 'Please try again.'
-          }
+          description={loadBanner}
           onRetry={() => void stored.refetch()}
         />
       ) : null}

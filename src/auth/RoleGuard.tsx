@@ -31,6 +31,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchOnboardingState } from '@/api/onboarding';
 import { queryKeys } from '@/api/queryKeys';
 import { useAuth } from '@/auth/AuthContext';
+import { resolveOnboardingVerdict } from '@/auth/roleGuardLogic';
 import { homePathForRole, isRouteAllowedForRole, ONBOARDING_ROUTE } from '@/auth/roleHome';
 import type { UserRole } from '@/types/auth';
 
@@ -64,19 +65,18 @@ export function useRoleGuard({ allow }: GuardOptions): GuardResult {
   });
 
   /**
-   * Derived, not synchronised.
-   *
-   * A failed read resolves to "not finished" rather than blocking forever: a
-   * person whose state call errored should be sent to the wizard, which will try
-   * again Ã¢â‚¬â€ not stranded on a blank screen. Guessing "finished" on a network
-   * error is the direction that would hand somebody a dashboard they were never
-   * shown the wizard for.
-   *
-   * Before the answer arrives the value is `undefined`, which is *not* `true`, so
-   * the guard holds at the wizard for a moment instead of flashing the protected
-   * content it is about to decide about.
+   * The verdict is resolved by a pure function (`roleGuardLogic.ts`) rather than
+   * inline, because the decision that has to be right - *wait for the answer
+   * instead of redirecting because there is not one yet* - is exactly the part a
+   * walkthrough of the running app cannot catch. In-app navigation reads a warm
+   * cache and behaves perfectly, so only a cold load exposes it.
    */
-  const finished = state.isError ? false : state.data?.state === 'completed';
+  const verdict = resolveOnboardingVerdict({
+    enabled: needsCheck,
+    isLoading: state.isLoading,
+    isError: state.isError,
+    state: state.data?.state,
+  });
 
   if (status === 'loading') return { kind: 'loading' };
   if (status !== 'authenticated' || !principal) {
@@ -89,7 +89,20 @@ export function useRoleGuard({ allow }: GuardOptions): GuardResult {
     return { kind: 'wrong-role', redirect: homePathForRole(role) };
   }
 
-  if (needsCheck && finished !== true) {
+  /*
+   * Asked, still asking: hold the same neutral loading state the auth check
+   * already uses rather than committing a redirect the server has not earned.
+   * The role layouts render `null` for `loading`, so this introduces no new
+   * spinner and no flash of the wrong screen - it only stops the premature
+   * navigation that sent a finished candidate back to the wizard on reload.
+   *
+   * It sits *after* the role checks on purpose: a candidate deep-linking into
+   * `/employer/*` is still bounced immediately, without waiting on a wizard
+   * question that has nothing to do with the role boundary.
+   */
+  if (verdict === 'loading') return { kind: 'loading' };
+
+  if (verdict === 'needs-onboarding') {
     return { kind: 'needs-onboarding', redirect: ONBOARDING_ROUTE };
   }
 

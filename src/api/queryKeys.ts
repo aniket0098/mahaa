@@ -17,6 +17,17 @@ export const queryKeys = {
   preferences: ['profile', 'preferences'] as const,
   mySkills: ['profile', 'skills'] as const,
   skillCatalog: (query: string) => ['skills', 'catalog', query] as const,
+  /**
+   * The onboarding picker's browse pages.
+   *
+   * Deliberately a *different* key from `skillCatalog`. That one caches a single
+   * `Page` (the profile screen's `AddSkillPanel` asks for one page and stops);
+   * this one caches an infinite query's `{pages, pageParams}`. Two different
+   * shapes under one key would let whichever screen mounted first hand the other
+   * data it cannot read. The `browse` segment keeps the two namespaces apart
+   * while still invalidating together under `['skills', 'catalog']`.
+   */
+  skillCatalogBrowse: (query: string) => ['skills', 'catalog', 'browse', query] as const,
   education: ['profile', 'education'] as const,
   experience: ['profile', 'experience'] as const,
   projects: ['profile', 'projects'] as const,
