@@ -43,6 +43,7 @@ from app.realtime import notification_events
 from app.schemas.connections import ConnectionRead, ConnectionStatusFilter
 from app.schemas.users import UserSummary
 from app.services import notifications, push
+from app.services.media import avatar_url_for
 from app.services.ownership import parse_id
 
 #: The one status the client's enum has that the database does not. ``canceled`` is
@@ -61,13 +62,16 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def _summary(user: User) -> UserSummary:
+def _summary(user: User, session: Session) -> UserSummary:
     """The minimum that identifies a person.
 
     Built from the same fields as ``GET /users/lookup`` returns, and for the same
-    reason: the client renders a row, not a profile. ``avatar_url`` is null for the
-    same reason it is null on ``MeResponse`` — there is no media row to resolve
-    ``avatar_media_id`` against until the media phase exists.
+    reason: the client renders a row, not a profile.
+
+    ``avatar_url`` is resolved through ``media.avatar_url_for`` rather than
+    hardcoded. It used to be a permanent ``None`` "until the media phase", which
+    is why a connection row never showed a face even for somebody who had saved
+    one. It is the same relative ``served_at`` path every other surface returns.
     """
 
     return UserSummary(
@@ -76,7 +80,7 @@ def _summary(user: User) -> UserSummary:
         username=user.username,
         name=user.name,
         role=user.role.value,
-        avatar_url=None,  # media phase
+        avatar_url=avatar_url_for(user, session),
     )
 
 
@@ -90,12 +94,12 @@ def counterpart(row: Connection, viewer: User) -> User:
     return row.addressee if row.requester_id == viewer.id else row.requester
 
 
-def connection_read(row: Connection, viewer: User) -> ConnectionRead:
+def connection_read(row: Connection, viewer: User, session: Session) -> ConnectionRead:
     return ConnectionRead(
         id=str(row.id),
         status=row.status.value,
         is_outgoing=row.requester_id == viewer.id,
-        user=_summary(counterpart(row, viewer)),
+        user=_summary(counterpart(row, viewer), session),
         created_at=_iso(row.created_at) or "",
         responded_at=_iso(row.responded_at),
     )
@@ -146,7 +150,7 @@ def list_for(
     rows = session.scalars(
         _with_people(statement).order_by(Connection.created_at.desc(), Connection.id)
     )
-    return [connection_read(row, viewer) for row in rows]
+    return [connection_read(row, viewer, session) for row in rows]
 
 
 def find_participant(session: Session, viewer: User, raw_id: str) -> Connection:
@@ -289,7 +293,7 @@ def _persist(
         # Phase 4 push: after the commit and after the socket, so a backgrounded
         # recipient is reached by the fallback path only.
         push.dispatch(session, notification)
-    return connection_read(row, viewer)
+    return connection_read(row, viewer, session)
 
 
 def _find_pair(session: Session, one: uuid.UUID, two: uuid.UUID) -> Connection | None:
@@ -419,7 +423,7 @@ def send_request(
     if existing.status is ConnectionStatus.PENDING:
         if existing.requester_id != viewer.id:
             raise _awaiting_their_reply()
-        return connection_read(existing, viewer), False
+        return connection_read(existing, viewer, session), False
 
     existing.requester_id = viewer.id
     existing.addressee_id = addressee_id
@@ -454,7 +458,7 @@ def _move_to(
     """
 
     if row.status is target:
-        return connection_read(row, viewer)
+        return connection_read(row, viewer, session)
     if row.status is not ConnectionStatus.PENDING:
         raise _invalid_transition(row.status, verb)
 
@@ -473,7 +477,7 @@ def _move_to(
         notification_events.publish_for(notification)
         # Phase 4 push: same placement — after the commit, after the socket.
         push.dispatch(session, notification)
-    return connection_read(row, viewer)
+    return connection_read(row, viewer, session)
 
 
 def accept(session: Session, viewer: User, raw_id: str) -> ConnectionRead:

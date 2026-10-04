@@ -12,16 +12,18 @@
  *
  * The header sits above all of it as navigation chrome, not as a page section.
  *
- * The stories row keeps its own Create (+) entry, which is the only publishing
- * entry point on this page and opens the honest `/add-post` notice until a posts
- * API exists.
+ * The stories row keeps its own Create (+) entry, and the composer card below it
+ * is the second way in. Both open the same `/add-post` screen, so there is one
+ * composer rather than two.
  *
- * **One request feeds the whole page.** The web app reads only the profile
- * aggregate (`GET /profile`) and derives completeness, skills, preferences and
- * the feed from it; this screen does the same rather than issuing a second
- * `/profile/completeness` call, so the percentage and the feed can never
- * disagree and there is no duplicate fetching. The Community Feed likewise adds
- * no request of its own — it re-shapes the records this query already returned.
+ * **The profile aggregate feeds the header and the snapshot; the feed has its own
+ * request.** `GET /profile` supplies identity, completeness, skills and
+ * preferences, so there is no second `/profile/completeness` call and the
+ * percentage cannot disagree with what is rendered. The Community Feed reads
+ * `GET /posts` itself: the feed shows *published posts*, and a published post is
+ * not something the profile aggregate contains. Profile records are deliberately
+ * not mixed into it — a project belongs on Profile until somebody chooses
+ * to post about it.
  *
  * There is deliberately **no greeting block**: the original removed it so the
  * story row could sit directly under the chrome.
@@ -44,6 +46,7 @@ import { DashboardHeader } from '@/features/home/DashboardHeader';
 import { LearningSection } from '@/features/home/LearningSection';
 import { OpportunityStories } from '@/features/home/OpportunityStories';
 import { CommunityFeed } from '@/features/feed/CommunityFeed';
+import { HomeComposerCard } from '@/features/home/HomeComposerCard';
 import { QuickActions } from '@/features/home/QuickActions';
 import { useStoryList } from '@/features/stories/useStoryList';
 import { styles } from '@/features/home/homeStyles';
@@ -74,6 +77,9 @@ export default function CandidateHomeScreen() {
   const stories = useStoryList(storiesQuery.data?.items);
 
   const openProfile = useCallback(() => router.push('/profile' as never), [router]);
+  // The Home composer is an entry to the one composer: publishing is owned by
+  // `/add-post`, so this navigates rather than mounting a second copy.
+  const openComposer = useCallback(() => router.push('/add-post' as never), [router]);
   const openLink = useCallback((url: string) => {
     // Project/credential links are the only outbound URLs, and they open in the
     // system browser rather than inside the app.
@@ -103,12 +109,16 @@ export default function CandidateHomeScreen() {
 
         <OpportunityStories stories={stories} />
 
-        {/* The feed sits directly under the Stories row, per the approved
-            layout. It is fed by the same profile query this screen already
-            ran — one request still feeds the whole page. */}
+        <HomeComposerCard
+          name={data?.identity.name ?? principal.username}
+          avatarUrl={data?.identity.avatar_url ?? null}
+          onCompose={openComposer}
+        />
+
+        {/* The composer and the feed sit directly under the Stories row. The feed
+            runs its own `/posts` request; see the note above. */}
         <CommunityFeed
           status={status}
-          profile={data}
           errorMessage={message}
           onRetry={retry}
           onOpenProfile={openProfile}

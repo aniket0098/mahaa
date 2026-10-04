@@ -13,6 +13,7 @@ import { type ReactNode } from 'react';
 import { Image } from 'expo-image';
 import { Pressable, TextInput, View } from 'react-native';
 
+import type { MediaKind } from '@/api/media';
 import { AppIcon } from '@/components/ui/AppIcon';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
@@ -243,34 +244,65 @@ export function CaptionField({
 /* Media                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/** The picker's accessible name, so it matches what it will actually add. */
+function mediaKindLabel(kind: MediaKind): string {
+  return kind === 'video'
+    ? 'Add a video from your gallery'
+    : 'Add images from your gallery';
+}
+
 /**
- * The picked-image grid: a preview per image, a remove button on each, and an
+ * The picked-media grid: a preview per item, a remove button on each, and an
  * "add" tile until the server's item limit is reached.
+ *
+ * **A video gets a labelled tile, not a thumbnail.** `expo-image` cannot decode a
+ * `.mp4`, so handing it one produces an empty square that looks exactly like a
+ * broken image. A muted tile with a video icon and the file name says what was
+ * chosen, which is the only truthful thing to show before the file is uploaded.
  */
 export function ImageGrid({
   media,
   canAddMore,
   onPick,
   onRemove,
+  mediaKind = 'image',
 }: {
   media: readonly DraftMedia[];
   canAddMore: boolean;
   onPick: () => void;
   onRemove: (localUri: string) => void;
+  /**
+   * Which media the picker is adding, so the control says "Add a video"
+   * rather than promising images the composer will refuse.
+   */
+  mediaKind?: MediaKind;
 }) {
   return (
     <View style={s.grid}>
       {media.map((item) => (
         <View key={item.localUri} style={s.thumbnail}>
-          <Image
-            source={{ uri: item.localUri }}
-            style={{ height: '100%', width: '100%' }}
-            contentFit="cover"
-            accessibilityLabel={item.fileName || 'Selected image'}
-          />
+          {item.kind === 'video' ? (
+            <View style={s.videoTile} accessibilityLabel={item.fileName || 'Selected video'}>
+              <AppIcon
+                name={{ ios: 'video.fill', android: 'videocam' }}
+                size={22}
+                color={colors.colorTextSecondary}
+              />
+              <AppText variant="caption" tone="secondary" numberOfLines={1}>
+                Video
+              </AppText>
+            </View>
+          ) : (
+            <Image
+              source={{ uri: item.localUri }}
+              style={{ height: '100%', width: '100%' }}
+              contentFit="cover"
+              accessibilityLabel={item.fileName || 'Selected image'}
+            />
+          )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Remove this image"
+            accessibilityLabel={item.kind === 'video' ? 'Remove this video' : 'Remove this image'}
             onPress={() => onRemove(item.localUri)}
             hitSlop={8}
             style={s.removeButton}>
@@ -286,7 +318,7 @@ export function ImageGrid({
       {canAddMore ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Add images from your gallery"
+          accessibilityLabel={mediaKindLabel(mediaKind)}
           onPress={onPick}
           style={s.addTile}>
           <AppIcon
@@ -329,7 +361,7 @@ export function UploadList({
           <View key={item.localUri} style={s.inputRow}>
             <View style={s.uploadLine}>
               <AppText variant="caption" tone="secondary" numberOfLines={1} style={{ flex: 1 }}>
-                {item.fileName || 'Image'}
+                {item.fileName || (item.kind === 'video' ? 'Video' : 'Image')}
               </AppText>
               <AppText variant="caption" tone={status === 'failed' ? 'danger' : 'tertiary'}>
                 {status === 'waiting'

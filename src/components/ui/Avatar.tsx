@@ -7,18 +7,34 @@
  *
  * The tint is decoration: the name is always rendered as text beside the avatar,
  * so a screen reader never depends on the colour to identify anyone.
+ *
+ * **The image is fetched with the bearer token, and that is load-bearing.** A
+ * profile photo is served from `GET /media/{id}`, which is deliberately
+ * uploader-only (§11.5) — there is no unsigned variant of that route. This
+ * component used to render a bare `react-native` `<Image source={{uri}}>`, which
+ * sends no `Authorization` header, so the request came back **401** and the
+ * `onError` handler quietly swapped in initials. The photo saved perfectly on
+ * the server and rendered nowhere, which is indistinguishable from "this person
+ * has no photo" from the outside.
+ *
+ * It now goes through {@link authenticatedImageSource} — the same helper the
+ * post cards already used — and resolves a relative `served_at` path onto the
+ * configured base with {@link absoluteMediaUri}, so the §14.11 contract
+ * (`/api/v1/media/<id>` joined onto the base) holds here too and no caller has to
+ * remember to do it.
  */
 
 import { useState } from 'react';
 import {
-  Image,
   StyleSheet,
   Text,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Image } from 'expo-image';
 
+import { absoluteMediaUri, authenticatedImageSource } from '@/api/media';
 import { colors, radius, typography } from '@/theme/tokens';
 
 export type AvatarSize = 32 | 40 | 56 | 96;
@@ -71,9 +87,18 @@ const sizeFont: Record<AvatarSize, number> = {
 };
 
 export function Avatar({ name, src = null, size = 40, shape = 'circle', style }: AvatarProps) {
-  // A broken image URL must degrade to initials rather than an empty circle.
-  const [failed, setFailed] = useState(false);
-  const showImage = Boolean(src) && !failed;
+  /*
+   * The media path is resolved here, once, rather than at each call site. It used
+   * to be handed a raw `/api/v1/media/<id>` from the profile aggregate and a raw
+   * path from the stories payload, while the post cards pre-resolved theirs — so
+   * the same avatar could load in one screen and 404 in another.
+   */
+  const resolved = src ? absoluteMediaUri(src) : null;
+
+  // Keyed on the url so replacing a photo clears the previous failure and the new
+  // image is actually attempted, instead of the old `onError` state sticking.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showImage = resolved !== null && failedUrl !== resolved;
   const tint = tintFor(name);
   const palette = tintColors[tint];
 
@@ -88,12 +113,13 @@ export function Avatar({ name, src = null, size = 40, shape = 'circle', style }:
         showImage ? styles.imageBackground : { backgroundColor: palette.bg },
         style,
       ]}>
-      {showImage ? (
+      {showImage && resolved ? (
         <Image
-          source={{ uri: src as string }}
+          source={authenticatedImageSource(resolved)}
           style={[styles.image, { width: size, height: size }]}
-          resizeMode="cover"
-          onError={() => setFailed(true)}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          onError={() => setFailedUrl(resolved)}
         />
       ) : (
         <Text
@@ -109,9 +135,24 @@ export function Avatar({ name, src = null, size = 40, shape = 'circle', style }:
 const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
-    // `flex: 0` keeps the avatar from growing or shrinking inside a row; RN's
-    // `flex` is a number, not a boolean.
-    flex: 0,
+    /**
+     * Spelled out rather than written as `flex: 0`.
+     *
+     * `flex: 0` is React Native's shorthand for "neither grow nor shrink" — Yoga
+     * reads it as `flexGrow: 0, flexShrink: 0, flexBasis: auto`. It is *also* the
+     * CSS shorthand for `flex: 0 1 0%`, and react-native-web emits it verbatim
+     * rather than translating it. The explicit `height` on this view then loses
+     * to `flex-basis: 0%`, so on the web every avatar collapsed to zero height
+     * and the initials text was all that was left: the profile header's circle
+     * rendered as a squashed pill with the edit badge crammed into it.
+     *
+     * Written this way both engines read the same thing — Yoga as
+     * `0 / 0 / auto`, CSS as `flex-grow: 0; flex-shrink: 0; flex-basis: auto`,
+     * which is what `flex: none` computes to.
+     */
+    flexBasis: 'auto',
+    flexGrow: 0,
+    flexShrink: 0,
     justifyContent: 'center',
     overflow: 'hidden',
   },

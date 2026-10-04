@@ -28,6 +28,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.url_safety import validate_public_url
 from app.models.enums import (
     AchievementCategory,
     EducationLevel,
@@ -49,6 +50,87 @@ def _iso(value: date | datetime | None) -> str | None:
     """
 
     return value.isoformat() if value is not None else None
+
+
+#: Partial-date shapes keyed by their character length, mapped to a
+#: ``strptime`` pattern. A missing day or month is filled with the first of the
+#: period, so the stored value is still a real, orderable ``date``.
+#:
+#: People do not think in ISO-8601. A graduate writes "2026", someone who
+#: remembers only the month writes "2026-06", and "2026/06/01" is what a phone
+#: keypad produces. The onboarding education form's own helper text says
+#: "YYYY-MM", so anything stricter rejected the format the UI itself asked for.
+_PARTIAL_DATES = {4: "%Y", 7: "%Y-%m", 10: "%Y-%m-%d"}
+
+#: Separators accepted in place of the ISO hyphen, so "2026/06" and "06-2026"
+#: style regional input is not a 422 for a formatting reason.
+_DATE_SEPARATORS = ("-", "/", ".", " ")
+
+
+def _coerce_date(value: object) -> object:
+    """Accept the date spellings a person actually types.
+
+    **Why this exists.** ``end_date``/``start_date`` are typed ``date``, so
+    Pydantic demanded a full ISO ``YYYY-MM-DD``. But the onboarding screen
+    explicitly instructs ``"YYYY-MM. The server checks the range against your
+    start date."`` and its placeholder is ``2026-06`` -- so following the UI's
+    own instructions returned a 422 on the education save. Verified against the
+    running API before this change: ``"2024-03"`` -> 422, ``"2026"`` -> 422,
+    ``"2026-06-01"`` -> 201.
+
+    A missing day or month is filled with the **first** of the period
+    (``2026`` -> ``2026-01-01``), which keeps the stored value a real, ordered
+    date so the ``end_date >= start_date`` check still means something.
+
+    **What this deliberately does not do.** It does not accept a free-form
+    string. ``"next summer"`` or ``"2026-13"`` still fail, because the point is
+    to accept *the same date written less precisely*, not to guess at an
+    arbitrary one. Impossibility is checked by the calendar itself, so ``"2026-02-30"``
+    is still rejected rather than silently rolled into March.
+
+    Anything that is not a string, or is a string in no recognised shape, is
+    returned untouched so Pydantic reports its normal, field-named 422 --
+    this widens the accepted formats, it does not replace the validation.
+    """
+
+    if not isinstance(value, str):
+        return value
+
+    raw = value.strip()
+    if not raw:
+        return value
+
+    # Try the shapes that are unambiguous once punctuation is normalised.
+    normalised = raw
+    for separator in _DATE_SEPARATORS:
+        if separator != "-":
+            normalised = normalised.replace(separator, "-")
+
+    for length, pattern in _PARTIAL_DATES.items():
+        if len(normalised) != length:
+            continue
+        try:
+            return datetime.strptime(normalised, pattern).date()
+        except ValueError:
+            # A shape we recognise that the calendar rejects ("2026-13-01",
+            # "2026-02-30") is an impossible date and must stay an error.
+            return value
+
+    return value
+
+
+def _coerce_optional_date(value: object) -> object:
+    """``_coerce_date``, but an empty string means "not supplied".
+
+    A cleared text field submits ``""``, which is how the client expresses "no
+    date" for a nullable field. Left alone it would 422 as an unparseable date
+    rather than clearing the column, so an optional date is normalised to
+    ``None`` instead.
+    """
+
+    if isinstance(value, str) and not value.strip():
+        return None
+    return _coerce_date(value)
 
 
 # --- identity ---------------------------------------------------------------
@@ -295,6 +377,13 @@ class EducationCreate(BaseModel):
     grade: str | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=5000)
 
+    # Runs *before* Pydantic's own `date` parsing, which is the only place a
+    # "2026" or "2026-06" can be widened into a real date. See `_coerce_date`
+    # for why the strict ISO-only rule was rejecting the format this screen's
+    # own helper text asks for.
+    _start_date = field_validator("start_date", mode="before")(_coerce_optional_date)
+    _end_date = field_validator("end_date", mode="before")(_coerce_optional_date)
+
     def check_dates(self) -> Self:
         """Ordered range, and ``current`` means open-ended.
 
@@ -337,6 +426,14 @@ class EducationUpdate(BaseModel):
     current: bool | None = None
     grade: str | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=5000)
+
+    # The same date coercion as `EducationCreate`, so editing an entry from
+    # `/profile/education` accepts the same spellings as adding one during
+    # onboarding. A PATCH and a POST that disagree about a date format are the
+    # kind of asymmetry that makes a field look "unfixable" in one screen and
+    # fine in the other.
+    _start_date = field_validator("start_date", mode="before")(_coerce_optional_date)
+    _end_date = field_validator("end_date", mode="before")(_coerce_optional_date)
 
 
 class EducationRead(BaseModel):
@@ -431,6 +528,18 @@ class ProjectCreate(BaseModel):
     check_dates = EducationCreate.check_dates
     _dates = model_validator(mode="after")(check_dates)
 
+    @field_validator("source_url", "live_url")
+    @classmethod
+    def _links_are_safe(cls, value: str | None) -> str | None:
+        """Same rule as the post payload's project block.
+
+        A profile project and a project post are the same link in two places, and
+        the profile screen renders them too. Validating only the post copy would
+        leave a ``javascript:`` URL storable through ``POST /profile/projects``
+        and renderable on somebody's profile.
+        """
+        return validate_public_url(value)
+
 
 class ProjectUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -445,6 +554,17 @@ class ProjectUpdate(BaseModel):
     #: When present, **replaces** the project's skill set. Absent means "leave it
     #: alone" â€” the same exclude_unset rule as every other PATCH here.
     skill_ids: list[str] | None = None
+
+    @field_validator("source_url", "live_url")
+    @classmethod
+    def _links_are_safe(cls, value: str | None) -> str | None:
+        """Same rule as :class:`ProjectCreate`.
+
+        A link that was safe on create must not become unsafe on edit, so the
+        validator sits on the PATCH model too rather than trusting that every
+        writer went through the create path.
+        """
+        return validate_public_url(value)
 
 
 class ProjectRead(BaseModel):
@@ -592,6 +712,58 @@ class ProfileAggregate(BaseModel):
     preferences: PreferencesRead | None = None
 
 
+# --- public profile ------------------------------------------------------------
+#
+# `GET /users/{public_id}` — §5.3's `PublicProfile`. Declared here rather than in
+# `schemas/users.py` because it is mostly profile content; the users router serves
+# it because that is the path the client already calls.
+
+
+class PublicProfile(BaseModel):
+    """One person's profile, filtered by their own privacy settings.
+
+    **The optional fields are the whole point, and they are omitted rather than
+    nulled.** §5.3: "uses **absent** fields, not `null`, when the viewer is not
+    allowed past the owner's setting. 'Not shown' and 'shown and empty' are
+    different claims and the client renders them differently." A public profile
+    with no headline is *shown and empty*; a private profile withheld from you is
+    *not shown*, and only the first may serialise as `headline: null`.
+
+    The route therefore returns this model with `response_model_exclude_unset=True`
+    and the service builds it by passing **only the fields it is allowed to
+    publish**. That is why this is not produced by dropping keys off the owner's
+    own aggregate: `PrivacyRead` and `PreferencesRead` are the owner's settings
+    and are never part of a public profile at all, and `exclude_none` would have
+    collapsed "shown and empty" into "not shown".
+    """
+
+    # --- always present: identity, which is what the caller already possessed ---
+    user_id: str
+    public_id: str
+    username: str
+    name: str
+    role: str
+    avatar_url: str | None = None
+    #: Whether the viewer is the owner. Computed per request, so it is a field
+    #: rather than a stored flag.
+    is_owner: bool
+    #: Echoed so the client can explain *why* a field is missing without guessing.
+    visibility: str
+
+    # --- published only when the viewer's role passes the owner's setting ---
+    designation: str | None = None
+    headline: str | None = None
+    summary: str | None = None
+    location: str | None = None
+    interests: list[str] | None = None
+    #: Gated on ``show_email`` in addition to the visibility gate.
+    email: str | None = None
+    #: Gated on ``show_phone`` for the same reason.
+    phone: str | None = None
+    skill_count: int | None = None
+    sections: dict[str, list[dict[str, object]]] | None = None
+
+
 # Re-exported so the users router can build the same `Me` the auth router does.
 # One definition, one shape: two `Me` classes would be two contracts to drift.
 __all__ = [
@@ -626,6 +798,7 @@ __all__ = [
     "ProjectRead",
     "ProjectSkillRef",
     "ProjectUpdate",
+    "PublicProfile",
     "SkillCatalogItem",
     "_iso",
 ]

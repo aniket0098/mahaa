@@ -11,6 +11,11 @@
  * **Nothing here uploads.** It returns a local `file://` handle. The upload is a
  * separate, explicit step (`uploadProfilePhoto`), so a picked file can never be
  * mistaken for a stored one — the failure this design is most careful about.
+ *
+ * **It lives in `lib/`, not in a feature.** The onboarding photo step was its only
+ * caller, so it sat under `features/onboarding`; the profile header now changes
+ * the same photo, and a profile screen importing from the onboarding feature
+ * would have been the wrong dependency direction. Both read it from here.
  */
 
 import * as ImagePicker from 'expo-image-picker';
@@ -71,6 +76,7 @@ export async function pickPhotoFromLibrary(): Promise<PickResult> {
     return {
       status: 'picked',
       media: {
+        kind: 'image',
         localUri: asset.uri,
         width: asset.width ?? 0,
         height: asset.height ?? 0,
@@ -114,6 +120,7 @@ export async function takePhotoWithCamera(): Promise<PickResult> {
     return {
       status: 'picked',
       media: {
+        kind: 'image',
         localUri: asset.uri,
         width: asset.width ?? 0,
         height: asset.height ?? 0,

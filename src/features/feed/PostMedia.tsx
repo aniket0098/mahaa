@@ -26,6 +26,7 @@ import { AppText } from '@/components/ui/AppText';
 import { colors } from '@/theme/tokens';
 import { authenticatedImageSource } from '@/api/media';
 import { styles } from '@/features/feed/feedStyles';
+import { PostVideo } from '@/features/feed/PostVideo';
 import { clampMediaIndex, mediaCountLabel, mediaDisplayHeight, type FeedMedia } from '@/features/feed/feedModel';
 
 export interface PostMediaProps {
@@ -73,9 +74,16 @@ export function PostMedia({ media, onOpen }: PostMediaProps) {
                 return (
                   <Pressable
                     key={item.id}
-                    accessibilityRole="imagebutton"
-                    accessibilityLabel={`Open image ${index + 1} of ${media.length}. ${item.alt}`}
-                    onPress={() => onOpen(index)}
+                    accessibilityRole={item.kind === "video" ? "button" : "imagebutton"}
+                    accessibilityLabel={
+                      item.kind === "video"
+                        ? item.alt
+                        : `Open image ${index + 1} of ${media.length}. ${item.alt}`
+                    }
+                    // A video plays in place. Sending it to the image viewer
+                    // would hand a `.mp4` to `expo-image`, which renders nothing
+                    // at all — a blank frame that reads as a broken post.
+                    onPress={item.kind === "video" ? undefined : () => onOpen(index)}
                     style={{ width }}>
                     {failed ? (
                       <View style={[styles.mediaError, { height: bandHeight }]}>
@@ -88,6 +96,8 @@ export function PostMedia({ media, onOpen }: PostMediaProps) {
                           This image could not be loaded.
                         </AppText>
                       </View>
+                    ) : item.kind === "video" ? (
+                      <PostVideo uri={item.uri} alt={item.alt} height={bandHeight} />
                     ) : (
                       <Image
                         source={authenticatedImageSource(item.uri)}

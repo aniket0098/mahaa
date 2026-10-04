@@ -254,6 +254,148 @@ def test_a_current_education_entry_cannot_have_an_end_date(
     assert response.status_code == 422, response.text
 
 
+def test_ordinary_education_values_are_accepted(api_client, candidate) -> None:
+    """Real college and degree names, verbatim.
+
+    Nothing here is normalised, case-folded or pattern-matched on the way in. The
+    "more freedom" requirement is that a real institution name is not a validation
+    failure -- punctuation, accents and non-Latin script all belong in a profile.
+    """
+
+    names = [
+        ("Government College of Engineering, Nagpur", "B.Tech. Computer Science & Engineering"),
+        ("St. Xavier's College - Mumbai", "B.E. Computer Engineering"),
+        ("Smt. XYZ College", "12th (HSC)"),
+        ("Réseau Polytechnique", "Master of Science — Data Science"),
+        ("शासकीय अभियांत्रिकी महाविद्यालय", "B.Tech"),
+    ]
+
+    for institution, degree in names:
+        response = api_client.post(
+            "/api/v1/profile/education",
+            json={"institution": institution, "degree": degree},
+            headers=candidate.headers,
+        )
+        assert response.status_code == 201, f"{institution}: {response.text}"
+        # Stored exactly as sent. A trimmmed or reformatted value would show up
+        # here, and the profile screen renders what is stored.
+        assert response.json()["institution"] == institution
+        assert response.json()["degree"] == degree
+
+
+def test_a_partial_date_is_accepted_and_filled(api_client, candidate) -> None:
+    """A year, or a year and a month, is how people actually answer this.
+
+    The onboarding form's helper text says "YYYY-MM" while the schema is typed
+    ``date``, so following the UI's own instruction produced a 422 that surfaced
+    as a nameless "That did not save". Verified against the running API before the
+    fix: ``"2024-03"`` -> 422, ``"2026"`` -> 422, ``"2026-06-01"`` -> 201.
+
+    A missing day or month is filled with the **first** of the period, so the
+    stored value stays a real, ordered date and the range check below still works.
+    """
+
+    for written, stored in [
+        ("2026", "2026-01-01"),
+        ("2026-06", "2026-06-01"),
+        ("2026/06", "2026-06-01"),
+        ("2026-06-15", "2026-06-15"),
+    ]:
+        response = api_client.post(
+            "/api/v1/profile/education",
+            json={"institution": "Somewhere", "end_date": written},
+            headers=candidate.headers,
+        )
+        assert response.status_code == 201, f"{written}: {response.text}"
+        assert response.json()["end_date"] == stored
+
+
+def test_an_impossible_date_is_still_422(api_client, candidate) -> None:
+    """Widening the *precision* accepted must not become accepting nonsense.
+
+    Free text and impossible calendar dates stay errors, and they stay 422s that
+    name the field -- so the client can put the message next to the right input
+    rather than reporting a generic save failure.
+    """
+
+    for written in ("next summer", "2026-13", "2026-02-30", "2026-06-00", "26th June"):
+        response = api_client.post(
+            "/api/v1/profile/education",
+            json={"institution": "Somewhere", "end_date": written},
+            headers=candidate.headers,
+        )
+        assert response.status_code == 422, f"{written}: {response.text}"
+        assert "end_date" in response.text
+
+
+def test_a_partial_date_still_participates_in_the_range_check(
+    api_client, candidate
+) -> None:
+    """The widened parse must not make the ordering rule meaningless.
+
+    ``2020`` becomes ``2020-01-01``, which is genuinely before a 2022 start, so an
+    inverted range written in the short form is still caught rather than silently
+    accepted because the day was defaulted.
+    """
+
+    response = api_client.post(
+        "/api/v1/profile/education",
+        json={
+            "institution": "Somewhere",
+            "start_date": "2022",
+            "end_date": "2020",
+        },
+        headers=candidate.headers,
+    )
+
+    assert response.status_code == 422, response.text
+    assert "end_date" in response.text
+
+
+def test_an_empty_optional_date_clears_rather_than_fails(
+    api_client, candidate
+) -> None:
+    """A cleared text field submits ``""``, which must mean "no date".
+
+    Left as an unparseable date this is a 422 on a PATCH somebody made to *remove*
+    something, which is the opposite of what they asked for.
+    """
+
+    created = api_client.post(
+        "/api/v1/profile/education",
+        json={"institution": "Somewhere", "end_date": "2026-06-15"},
+        headers=candidate.headers,
+    )
+    assert created.status_code == 201, created.text
+    row_id = created.json()["id"]
+
+    cleared = api_client.patch(
+        f"/api/v1/profile/education/{row_id}",
+        json={"current": False, "end_date": ""},
+        headers=candidate.headers,
+    )
+
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["end_date"] is None
+
+
+def test_an_empty_institution_is_still_422(api_client, candidate) -> None:
+    """The one required field on this step stays required.
+
+    ``min_length=1`` is a real data-integrity rule: an education row with no
+    institution says nothing, and this step's gate counts rows.
+    """
+
+    response = api_client.post(
+        "/api/v1/profile/education",
+        json={"institution": "", "degree": "B.Tech"},
+        headers=candidate.headers,
+    )
+
+    assert response.status_code == 422, response.text
+    assert "institution" in response.text
+
+
 def test_an_inverted_experience_range_is_422(api_client, candidate) -> None:
     """Experience reuses the education check; this is what proves it does."""
 

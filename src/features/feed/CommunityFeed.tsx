@@ -12,11 +12,10 @@
  * section's `testID` is the only thing identifying it in tests, which is why it
  * is kept.
  *
- * **What the feed contains.** One merged list — the candidate's own real records
- * from the `GET /profile` aggregate the screen already fetched, followed by the
- * development-only demo posts. There is no posts API, so there is no second
- * author, no pagination, and no engagement count anywhere in this section, and
- * nothing here is fetched a second time.
+ * **What the feed contains.** Published posts from `GET /posts`, newest first,
+ * followed by the development-only demo posts. Profile records are deliberately
+ * *not* a source: a project or certification the candidate added to their
+ * profile shows up here only once they publish a post about it.
  *
  * **Demo labelling is per card, not per section.** Each demo post still carries
  * its own DEMO chip and its images still carry a DEMO watermark, so removing the
@@ -42,12 +41,10 @@ import { FeedPostCard } from '@/features/feed/FeedPostCard';
 import { styles } from '@/features/feed/feedStyles';
 import type { FeedFilter } from '@/features/feed/feedModel';
 import { useFeedPosts } from '@/features/feed/useFeedPosts';
-import type { ProfileAggregate } from '@/types/profile';
 
 export interface CommunityFeedProps {
-  /** Status of the profile aggregate the own-records half depends on. */
+  /** Status of the page's own profile request, shown while the feed warms up. */
   status: 'loading' | 'error' | 'ready';
-  profile?: ProfileAggregate;
   errorMessage?: string | null;
   onRetry?: () => void;
   onOpenProfile: () => void;
@@ -56,18 +53,17 @@ export interface CommunityFeedProps {
 
 export function CommunityFeed({
   status,
-  profile,
   errorMessage,
   onRetry,
   onOpenProfile,
   onOpenLink,
 }: CommunityFeedProps) {
   const [filter, setFilter] = useState<FeedFilter>('latest');
-  const view = useFeedPosts(profile, filter);
+  const view = useFeedPosts(filter);
 
-  // The feed's own `/posts` request is the one that decides whether the section
-  // is loading or has failed; the profile request only supplies the own-records
-  // half, so a profile failure must not blank out real posts the server sent.
+  // The feed's own `/posts` request decides whether the section is loading or has
+  // failed; the page's profile request only feeds the header, so a profile failure
+  // must not blank out real posts the server sent.
   const feedStatus = view.status === 'error' ? 'error' : view.status === 'loading' ? 'loading' : status;
   const feedError = view.status === 'error' ? view.errorMessage : errorMessage;
 
@@ -101,7 +97,7 @@ export function CommunityFeed({
             </AppText>
             <AppText variant="small" tone="secondary">
               {view.total === 0
-                ? 'Projects, certifications, achievements, and education you add to your profile appear here as soon as you save them.'
+                ? 'Your projects, skills and certificates live on your Profile. This feed only shows what you choose to post.'
                 : `You have ${view.total} ${view.total === 1 ? 'post' : 'posts'} in the feed, but none of this type. Switch back to Latest to see them all.`}
             </AppText>
             {view.total === 0 ? (

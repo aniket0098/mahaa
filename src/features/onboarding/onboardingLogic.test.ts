@@ -46,7 +46,7 @@ describe('requiredKeys â€” the completion gate', () => {
   it('lists only the steps that can block completion', () => {
     // Optional steps must never appear here: the gate decides whether a person may
     // finish, and including a skippable step would trap them in the wizard.
-    expect(requiredKeys('candidate')).toEqual(['basics', 'education', 'skills', 'preferences']);
+    expect(requiredKeys('candidate')).toEqual(['basics', 'about']);
     expect(requiredKeys('employer')).toEqual(['company']);
     expect(requiredKeys('college')).toEqual(['institution', 'programs']);
   });
@@ -105,8 +105,8 @@ describe('requiredKeys â€” the completion gate', () => {
 
 describe('resolveStep â€” the server decides the position', () => {
   it('opens a new account on its first unfinished step', () => {
-    const resolved = resolveStep(state({ next_step: 'education' }), CANDIDATE_STEPS);
-    expect(CANDIDATE_STEPS[resolved].key).toBe('education');
+    const resolved = resolveStep(state({ next_step: 'about' }), CANDIDATE_STEPS);
+    expect(CANDIDATE_STEPS[resolved].key).toBe('about');
   });
 
   it('opens a fresh account on the first screen when nothing is stored', () => {

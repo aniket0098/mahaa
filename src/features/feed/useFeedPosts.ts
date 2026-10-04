@@ -7,11 +7,10 @@
  * subscribes to the module store in `localEngagement.ts` and the merge is
  * recomputed against that version.
  *
- * **No request is made here.** The real posts come from the `GET /profile`
- * aggregate the Home screen already fetched — the feed adds no round trip — and
- * the demo posts come from `demoFeedPosts.ts`, which is gated on `__DEV__`.
- * When demo mode is off and the profile has no records, the honest empty state
- * stands: nothing is invented to fill the feed.
+ * **No request is made here.** The real posts come from the hook's own
+ * `/posts` query, and the demo posts come from `demoFeedPosts.ts`, which is
+ * gated on `__DEV__`. When demo mode is off and nobody has published anything,
+ * the honest empty state stands: nothing is invented to fill the feed.
  */
 
 import { useEffect, useSyncExternalStore } from 'react';
@@ -20,11 +19,9 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchPosts } from '@/api/posts';
 import { queryKeys } from '@/api/queryKeys';
 import { primeMediaAuth } from '@/api/media';
-import type { ProfileAggregate } from '@/types/profile';
 import {
   countByCategory,
   filterFeed,
-  fromProfileRecords,
   mergeFeed,
   type FeedCategory,
   type FeedFilter,
@@ -63,18 +60,25 @@ export interface FeedView {
  *  1. **Real posts** from `GET /posts` — the community feed, newest first. This is
  *     the only source a published post reaches, so a post appears here only
  *     because the server said so.
- *  2. **The candidate's own profile records**, from the `GET /profile` aggregate
- *     the screen already fetched. Kept because a project or certificate that has
- *     not been published as a post is still real content the candidate owns.
- *  3. **Development demo posts**, appended last and only under `__DEV__`.
+ *  2. **Development demo posts**, appended last and only under `__DEV__`.
+ *
+ * **Profile records are deliberately NOT a source.** This hook used to merge the
+ * profile-record mapper in beside the real posts, which put a candidate's
+ * projects, certifications, achievements and education into the feed as though
+ * they had been published. That is the opposite of the product rule: profile
+ * data belongs on Profile, and Home is where somebody *chooses* to publish. A
+ * person who added a project to their CV did not ask for a post, and a feed that
+ * shows them one is showing them something they never sent. To put a project
+ * here they now compose a post deliberately.
+ *
+ * The mapper itself still lives in `feedModel.ts` because the mapping is real
+ * and tested; it is simply no longer a feed source, and
+ * `feedIsolation.test.ts` asserts this file does not reach it.
  *
  * Filtering is client-side over that merged list, so switching a chip needs no
  * request and the list can never disagree with the filter bar.
  */
-export function useFeedPosts(
-  profile: ProfileAggregate | undefined,
-  filter: FeedFilter,
-): FeedView {
+export function useFeedPosts(filter: FeedFilter): FeedView {
   // Subscribing re-renders the section when a like, save, or hide changes. The
   // subscription is the dependency; the values themselves are read from the
   // module store during render rather than from a snapshot, so the list can
@@ -99,17 +103,14 @@ export function useFeedPosts(
 
   const demoEnabled = isDemoFeedEnabled();
 
-  // Real records: only ever the authenticated candidate's own rows.
-  const realPosts = profile ? fromProfileRecords(profile) : [];
-
   // Demo posts are built fresh so their relative times read as recent, and the
   // list is empty the moment demo mode is off.
   const demoPosts = demoEnabled ? createDemoFeedPosts(new Date().toISOString()) : [];
 
   const { hidden } = snapshotLocalEngagement();
-  // `mergeFeed` keeps the demo gate in one place; the two real sources are simply
-  // concatenated, so demo content can never lead the feed.
-  const merged = mergeFeed([...(postsQuery.data ?? []), ...realPosts], demoPosts, {
+  // `mergeFeed` keeps the demo gate in one place, and demo content is appended
+  // after the real posts so it can never lead the feed.
+  const merged = mergeFeed(postsQuery.data ?? [], demoPosts, {
     demoEnabled,
   }).filter((post) => !hidden.has(post.id));
 

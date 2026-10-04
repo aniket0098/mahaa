@@ -15,10 +15,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { fetchPrincipal, login as loginRequest, signup as signupRequest } from '@/api/auth';
 import { apiClient } from '@/api/client';
 import { ApiError } from '@/api/errors';
+import { clearMediaAuth } from '@/api/media';
 import { AuthContext, type AuthContextValue } from '@/auth/AuthContext';
 import { tokenStorage } from '@/auth/tokenStorage';
 import { pushDeviceStore } from '@/notifications/deviceStore';
@@ -39,6 +41,7 @@ interface AuthProviderProps {
 const LOGOUT_PUSH_TIMEOUT_MS = 2_000;
 
 export function AuthProvider({ children }: AuthProviderProps) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [principal, setPrincipal] = useState<Principal | null>(null);
 
@@ -108,6 +111,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
    *
    * It runs *before* `tokenStorage.clear()` because the call is authenticated —
    * clearing the token first would turn every unregister into a 401.
+   *
+   * **The query cache is dropped last, and that is the point.** Every screen's
+   * data — this account's `me`, its profile, its feed, its connections — stays in
+   * memory until now, so signing in as somebody else would render the previous
+   * user's avatar, name and posts for as long as the cache's 5-minute `gcTime`
+   * had not expired. `clearMediaAuth()` drops the mirrored bearer token for the
+   * same reason: a signed-out session must not be able to read media bytes.
    */
   const logout = useCallback(async () => {
     const deviceId = await pushDeviceStore.get();
@@ -119,9 +129,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await pushDeviceStore.clear();
     }
     await tokenStorage.clear();
+    // The previous account's cached reads must not survive into the next session.
+    clearMediaAuth();
+    queryClient.clear();
     setPrincipal(null);
     setStatus('unauthenticated');
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ status, principal, login, signup, logout }),

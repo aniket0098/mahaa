@@ -177,28 +177,34 @@ def _decode_cursor(cursor: str | None) -> tuple[datetime, uuid.UUID] | None:
         raise _bad_cursor() from exc
 
 
-def _actor_of(notification: Notification) -> NotificationActor | None:
+def _actor_of(notification: Notification, session: Session) -> NotificationActor | None:
     """``None`` when ``actor_id`` is null — §13.2's "not shown".
 
     A deleted actor lands here too, because ``actor_id`` is SET NULL (§13.4): the
     notification survives its actor and renders as if it had never had one, which
     is the behaviour §13.4 asks for rather than an accident of the join.
+
+    ``avatar_url`` is resolved through ``media.avatar_url_for`` — the same helper
+    every other surface uses. It was a permanent ``None`` "until the media phase",
+    which meant a notification from somebody with a saved photo showed initials.
     """
 
     if notification.actor is None:
         return None
+    from app.services.media import avatar_url_for
+
     return NotificationActor(
         user_id=str(notification.actor.id),
         name=notification.actor.name,
-        avatar_url=None,  # media phase
+        avatar_url=avatar_url_for(notification.actor, session),
     )
 
 
-def _read(notification: Notification) -> NotificationRead:
+def _read(notification: Notification, session: Session) -> NotificationRead:
     return NotificationRead(
         id=str(notification.id),
         type=notification.type.value,
-        actor=_actor_of(notification),
+        actor=_actor_of(notification, session),
         target_type=notification.target_type,
         target_id=(
             str(notification.target_id) if notification.target_id is not None else None
@@ -287,7 +293,7 @@ def list_for(
     boundary = page_rows[-1] if (has_more and page_rows) else None
 
     return NotificationPage(
-        items=[_read(row) for row in page_rows],
+        items=[_read(row, session) for row in page_rows],
         total=total or 0,
         limit=limit,
         next_cursor=(

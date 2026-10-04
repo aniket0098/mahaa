@@ -112,6 +112,39 @@ $env:DATABASE_URL = "postgresql+psycopg://postgres@localhost:5432/mahaa"
 alembic upgrade head
 ```
 
+
+#### Seed the skills catalogue
+
+`skills` is a catalogue **table**, and the migration creates it empty. A freshly
+migrated database therefore serves an empty catalogue, the skill picker offers
+nothing, and **onboarding cannot get past 50%** — the `skills` step never
+completes, so a new account can never reach Home.
+
+Seed it once after migrating:
+
+```powershell
+# dry run first; this is the default and writes nothing
+.\.venv\Scripts\python.exe tools\seed_skills.py --catalog tools\skills_catalog.json
+
+# then apply, against the local database only
+.\.venv\Scripts\python.exe tools\seed_skills.py --catalog tools\skills_catalog.json --apply
+```
+
+`DATABASE_URL` is read from the environment, so export it first. The script is
+idempotent (a second run inserts 0 rows), dry-runs unless `--apply` is passed,
+and refuses a `.example.` catalogue in production. It reports only
+`host:port/database`, never the password.
+
+`tools/skills_catalog.json` is the approved catalogue: **140 skills across 18
+categories**. `tools/SKILLS_SEED.md` has the format and the column contract.
+
+Check it took:
+
+```powershell
+(Invoke-RestMethod http://127.0.0.1:8000/api/v1/skills/catalog -Headers @{
+    Authorization = "Bearer $env:TOKEN"
+}).total   # expect 140
+```
 To run against a scratch database without touching `DATABASE_URL`, pass the
 override Alembic already supports:
 

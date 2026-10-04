@@ -21,6 +21,17 @@ in the wizard instead of being shown an empty dashboard. That is the
 conservative answer on purpose: a false completion is what strands somebody on a
 screen they already finished, whereas the opposite mistake is merely
 inconvenient. Both become true the moment those phases land.
+
+**A step's ``complete`` must be reachable by saving that step, and by nothing
+else.** The client refuses to advance while ``complete`` is false and reports a
+save failure when it stays false (``src/app/onboarding.tsx``), so any condition
+here that the step's own screen cannot satisfy turns into an unrecoverable error
+screen: Retry replays the same save, so it fails the same way forever. That is not
+hypothetical. Requiring ``skills >= 3`` on the merged education+skills screen,
+while the screen asked only for an institution, produced exactly that loop, and it
+is the bug this table was fixed for. Before adding a condition to a step, check
+that the step's screen can satisfy it; where the two genuinely disagree, the
+screen's contract is the one to correct, not this table's.
 """
 
 from __future__ import annotations
@@ -34,6 +45,26 @@ from app.services.completeness import ProfileCounts, collect_counts
 
 
 def _candidate_steps(counts: ProfileCounts) -> list[OnboardingStep]:
+    """The candidate's four screens, in the order ``CANDIDATE_STEPS`` lists them.
+
+    **This table mirrors ``src/features/onboarding/onboardingSteps.ts`` exactly**,
+    including which steps are ``required``. The client owns the presentation order
+    and the gate; this owns whether each step is *done*. They agreeing is the whole
+    design, and it is why this table had to change in the same edit as the
+    client's: a step present on one side and absent on the other is a wizard that
+    either cannot be finished or lets somebody past a gate.
+
+    ``about`` is the merged education + skills screen, and it is complete when a
+    real **education** row exists. Skills are offered on the same screen but are a
+    recommendation, not a gate -- see the long note on the step below for why
+    counting ``skills >= 3`` here produced an unrecoverable wizard.
+
+    **What is deliberately *not* here any more:** ``experience``, ``preferences``
+    and ``links``. None is a precondition for authentication, routing, posting,
+    connections or search, and gating on them meant a new account could not reach
+    the product at all. The underlying rows are untouched and stay editable from
+    the profile screen; only the onboarding gate is gone.
+    """
     return [
         OnboardingStep(
             key="basics",
@@ -43,32 +74,41 @@ def _candidate_steps(counts: ProfileCounts) -> list[OnboardingStep]:
             hint="Add the headline, location, and bio employers see first.",
         ),
         OnboardingStep(
-            key="education",
-            label="Education",
+            key="about",
+            label="About You",
+            # **Education is the gate. Skills are a recommendation, not a gate.**
+            #
+            # This used to be `education > 0 and skills >= 3`, and that single
+            # clause was the cause of the reported "That did not save / Retry /
+            # still broken" loop in the mobile wizard. The two halves disagreed
+            # about what the step required:
+            #
+            #   - the server counted ``skills >= 3`` toward completion;
+            #   - ``AboutYouStep`` enabled Continue on an institution alone,
+            #     and its own docstring says "**Skills are a recommendation,
+            #     not a gate.** ... Somebody with an education entry and no
+            #     catalogue match is not blocked."
+            #
+            # So a person who filled in their college and added one skill got a
+            # clean ``201`` from ``POST /profile/education`` and was then told by
+            # this endpoint that the save had not registered -- and because Retry
+            # replays the identical request, it could never succeed. Nothing in
+            # the flow asked for a third skill, so no retry could ever supply it.
+            #
+            # ``SKILLS_TARGET`` in ``completeness.py`` is the right home for the
+            # three-skill rule: it scores the *profile*, and a profile can
+            # honestly be told it is 20% short of a good skills section without
+            # being told its save failed. Gating the wizard on the same number
+            # conflated "this profile could be better" with "this data is not
+            # stored", which is precisely the confusion being fixed here.
+            #
+            # The rows themselves are untouched: a candidate still gets one real
+            # education row before they can finish, so this relaxes a *count of
+            # unrelated rows*, not the requirement that the step's own subject
+            # exist.
             complete=counts.education > 0,
             required=True,
-            hint="Add where you studied.",
-        ),
-        OnboardingStep(
-            key="skills",
-            label="Skills",
-            complete=counts.skills >= 3,
-            required=True,
-            hint="Add at least three skills.",
-        ),
-        OnboardingStep(
-            key="experience",
-            label="Experience & projects",
-            complete=counts.experience > 0 or counts.projects > 0,
-            required=False,
-            hint="Show what you have done so far. Optional.",
-        ),
-        OnboardingStep(
-            key="preferences",
-            label="Preferences",
-            complete=counts.has_preferences,
-            required=True,
-            hint="Set the work modes and job types you want.",
+            hint="Add where you studied and the skills you want to be known for.",
         ),
         OnboardingStep(
             key="photo",
@@ -78,17 +118,10 @@ def _candidate_steps(counts: ProfileCounts) -> list[OnboardingStep]:
             hint="Add a photo from your camera or gallery. Optional.",
         ),
         OnboardingStep(
-            key="links",
-            label="Resume & links",
-            complete=counts.links >= 1,
-            required=False,
-            hint="Add a resume, a portfolio, or a LinkedIn link. Optional.",
-        ),
-        OnboardingStep(
             key="review",
             label="Review and finish",
-            # The review screen collects nothing; it is how the wizard ends, and
-            # it is never a gate â€” see the step table's own note in the client.
+            # The review screen collects nothing; it is how the wizard ends, and it
+            # is never a gate -- see the step table's own note in the client.
             complete=True,
             required=False,
             hint="Check everything, then finish and open your dashboard.",

@@ -23,6 +23,7 @@ const NOW = '2026-06-01T12:00:00.000Z';
 function media(localUri: string): DraftMedia {
   return {
     localUri,
+    kind: 'image',
     fileName: `${localUri}.png`,
     mimeType: 'image/png',
     sizeBytes: 2048,

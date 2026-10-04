@@ -121,7 +121,7 @@ def update_identity(
     session.add(profile)
     session.commit()
     session.refresh(profile)
-    return svc.identity_read(current_user, profile)
+    return svc.identity_read(current_user, profile, session)
 
 
 # --- privacy ----------------------------------------------------------------

@@ -9,7 +9,6 @@
 import { StyleSheet } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme/tokens';
-import type { WorkMode } from '@/types/profile';
 
 /** Mirrors `app.schemas.profile.ProfileIdentityUpdate` bounds. */
 export const HEADLINE_MAX = 200;
@@ -17,7 +16,9 @@ export const SUMMARY_MAX = 4000;
 export const LOCATION_MAX = 160;
 export const INTEREST_MAX = 80;
 export const INTERESTS_MAX = 20;
-/** Mirrors `app.schemas.profile.EducationCreate` bounds. */
+/**
+ * Mirrors `app.schemas.profile.EducationCreate` bounds.
+ */
 export const INSTITUTION_MAX = 200;
 export const DEGREE_MAX = 120;
 
@@ -28,39 +29,13 @@ export const DEGREE_MAX = 120;
  */
 export const MIN_SKILLS = 3;
 
-/**
- * Mirrors `app.schemas.profile.PreferencesUpdate`.
- *
- * The server stores these as free-text lists, but the common values are fixed, so
- * they are offered as chips. Anything else is reachable through the free-text
- * fields below rather than being forced into one of these — a filter that cannot
- * express "contract work in Berlin" is a filter that hides real preferences.
+/*
+ * The work-mode, employment-type and preference-list constants that used to live
+ * here went with the onboarding `preferences` step. `/profile/preferences` has
+ * always declared its own copies inline next to the form that uses them, which is
+ * where they belong: they are that screen's options, not a shared wizard constant
+ * that a second screen happened to import.
  */
-export const WORK_MODES: readonly { value: WorkMode; label: string }[] = [
-  { value: 'remote', label: 'Remote' },
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'onsite', label: 'On-site' },
-];
-
-export const EMPLOYMENT_TYPES: readonly string[] = [
-  'full_time',
-  'part_time',
-  'internship',
-  'contract',
-  'freelance',
-];
-
-export const EMPLOYMENT_TYPE_LABELS: Readonly<Record<string, string>> = {
-  full_time: 'Full time',
-  part_time: 'Part time',
-  internship: 'Internship',
-  contract: 'Contract',
-  freelance: 'Freelance',
-};
-
-/** Mirrors `app.schemas.profile.PreferencesUpdate` list bounds. */
-export const PREFERENCE_MAX = 20;
-export const LOCATION_ITEM_MAX = 120;
 
 export const stepStyles = StyleSheet.create({
   card: { gap: spacing.md },

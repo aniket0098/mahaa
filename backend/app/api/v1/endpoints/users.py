@@ -23,10 +23,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Path, Query, Response, status
+from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.errors import ApiError, ErrorCode
+from app.models import User
 from app.schemas.auth import MeResponse
+from app.schemas.profile import PublicProfile
 from app.schemas.users import (
     ChangePasswordRequest,
     DeleteAccountRequest,
@@ -37,6 +41,7 @@ from app.schemas.users import (
 from app.services import account as svc
 from app.services import lookup as lookup_service
 from app.services import media as media_service
+from app.services import profile_service
 from app.services.lookup import LOOKUP_QUERY_MAX
 
 router = APIRouter(tags=["users"])
@@ -215,4 +220,57 @@ def lookup_users(
     """
 
     return lookup_service.find_users(session, current_user, query)
+
+
+@router.get(
+    "/users/{public_id}",
+    response_model=PublicProfile,
+    # §5.3's whole rule: a field the viewer may not see is **absent**, not null.
+    # Only the service's explicitly-passed fields are "set", so only those are
+    # serialised. `exclude_none` would have been wrong here — it would also drop a
+    # field that is genuinely shown and genuinely empty, collapsing the two claims
+    # §5.3 exists to keep apart.
+    response_model_exclude_unset=True,
+    summary="A person's public profile",
+)
+def read_public_profile(
+    current_user: CurrentUser,
+    session: DbSession,
+    public_id: Annotated[str, Path(max_length=100)],
+) -> PublicProfile:
+    """``PublicProfile`` (§5.2/§5.3), filtered by the owner's privacy settings.
+
+    **Declared after `/users/lookup` on purpose** — the comment above that route
+    reserved this slot, and the reason is routing, not taste: FastAPI matches in
+    declaration order, so a ``{public_id}`` route registered before the literal
+    ``/users/lookup`` would swallow every lookup request and the search would 404
+    as a missing user.
+
+    Authentication is required, matching every other route here: an anonymous
+    caller gets no profile at all rather than a reduced one.
+
+    **This route never returns `MeResponse`, and that is the privacy boundary.**
+    `MeResponse` carries an email and a phone; this carries only what the owner's
+    own settings permit, and the read model has no `password_hash` field to expose
+    even by accident — the same property that makes `/users/me` safe, applied to
+    somebody else's account.
+
+    An unknown or suspended-looking handle is answered with the standard 404
+    envelope rather than 403, so the route cannot be used to confirm which public
+    ids exist. That matters less than it would for a password, and the caller
+    already has to possess the id to ask, but a 200/404 pair that answered "this
+    id exists" for an arbitrary string would still be a harvest.
+    """
+
+    owner = session.scalar(
+        select(User).where(func.lower(User.public_id) == public_id.strip().lower())
+    )
+    if owner is None:
+        raise ApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=ErrorCode.NOT_FOUND,
+            message="No profile was found for that link.",
+        )
+
+    return profile_service.public_profile_read(session, current_user, owner)
 

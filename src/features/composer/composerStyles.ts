@@ -90,6 +90,16 @@ export const composerStyles = StyleSheet.create({
     overflow: 'hidden',
     width: 92,
   },
+  /**
+   * A chosen video before it is uploaded. `expo-image` cannot decode an `.mp4`,
+   * so a thumbnail would be an empty square that reads as a broken image.
+   */
+  videoTile: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+  },
   removeButton: {
     alignItems: 'center',
     backgroundColor: colors.colorOverlay,

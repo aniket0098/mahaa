@@ -131,6 +131,7 @@ const education = {
 function makeMedia(overrides: Partial<FeedMedia> = {}): FeedMedia {
   return {
     id: 'm1',
+    kind: 'image',
     uri: 'https://example.com/photo.png',
     width: 1280,
     height: 800,

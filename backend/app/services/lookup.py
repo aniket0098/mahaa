@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import ApiError, ErrorCode, error_detail
 from app.models import ProfilePrivacy, User
 from app.schemas.users import UserSummary
+from app.services.media import avatar_url_for
 
 #: The longest search term. Long enough for any real name or handle; short enough
 #: that a pathological input cannot turn into a big scan.
@@ -139,7 +140,8 @@ def find_users(session: Session, viewer: User, query: str) -> list[UserSummary]:
             username=user.username,
             name=user.name,
             role=user.role.value,
-            avatar_url=None,  # media phase
+            # Resolved so a search result shows the same face as a post card.
+            avatar_url=avatar_url_for(user, session)
         )
         for user in session.scalars(statement)
     ]

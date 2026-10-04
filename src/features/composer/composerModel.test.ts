@@ -31,7 +31,7 @@ import {
   parseTechnologies,
   remainingMediaSlots,
   validateDraft,
-  validatePickedImage,
+  validatePickedMedia,
   withStatus,
   type Draft,
   type DraftMedia,
@@ -43,12 +43,15 @@ const LIMITS = {
   maxItems: 10,
   maxImageBytes: 8 * 1024 * 1024,
   imageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  maxVideoBytes: 10 * 1024 * 1024,
+  videoMimeTypes: ['video/mp4', 'video/quicktime'],
   videoDurationEnforced: false,
 };
 
 function media(localUri: string): DraftMedia {
   return {
     localUri,
+    kind: 'image',
     fileName: `${localUri}.png`,
     mimeType: 'image/png',
     sizeBytes: 1024,
@@ -57,12 +60,25 @@ function media(localUri: string): DraftMedia {
   };
 }
 
+/** A video has no server-derived dimensions, so they stay 0 ("unknown"). */
+function videoMedia(localUri: string): DraftMedia {
+  return {
+    localUri,
+    kind: 'video',
+    fileName: `${localUri}.mp4`,
+    mimeType: 'video/mp4',
+    sizeBytes: 2 * 1024 * 1024,
+    width: 0,
+    height: 0,
+  };
+}
+
 function draftWith(overrides: Partial<Draft> = {}): Draft {
   return { ...emptyDraft(), ...overrides };
 }
 
 describe('post types', () => {
-  it('offers the five types, with video the only disabled one', () => {
+  it('offers the five types, all of them selectable', () => {
     expect(COMPOSER_TYPES.map((option) => option.value)).toEqual([
       'text',
       'image',
@@ -70,13 +86,17 @@ describe('post types', () => {
       'project',
       'achievement',
     ]);
-    expect(COMPOSER_TYPES.filter((option) => !option.enabled).map((o) => o.value)).toEqual(['video']);
+    expect(COMPOSER_TYPES.filter((option) => !option.enabled)).toEqual([]);
   });
 
-  it('states why video is unavailable instead of hiding the option', () => {
+  it('makes video selectable without claiming a duration limit', () => {
     const video = COMPOSER_TYPES.find((option) => option.value === 'video');
-    expect(video?.enabled).toBe(false);
-    expect(video?.unavailableReason).toMatch(/duration check/i);
+    expect(video?.enabled).toBe(true);
+    // The server publishes `video_duration_enforced: false`, so there is nothing
+    // to verify a duration against. The copy must not imply otherwise.
+    expect(video?.unavailableReason).toBeUndefined();
+    expect(video?.hint).not.toMatch(/second|limit/i);
+    expect(LIMITS.videoDurationEnforced).toBe(false);
   });
 });
 
@@ -195,8 +215,11 @@ describe('the upload state machine', () => {
 
 describe('buildCreateInput', () => {
   it('sends only the body for a text post, trimmed', () => {
+    // `category` is here because the server requires it; the point of the test is
+    // still that no empty project or achievement object rides along.
     expect(buildCreateInput(draftWith({ type: 'text', body: '  Hello  ' }), [])).toEqual({
       kind: 'text',
+      category: 'community',
       body: 'Hello',
     });
   });
@@ -318,14 +341,14 @@ describe('a project post with a cover image', () => {
 
 describe('media validation', () => {
   it('rejects a type outside the allow-list', () => {
-    const gif = validatePickedImage({ mimeType: 'image/gif', sizeBytes: 10, width: 1, height: 1 });
+    const gif = validatePickedMedia({ kind: 'image', mimeType: 'image/gif', sizeBytes: 10, width: 1, height: 1 });
     expect(gif).toMatch(/not supported/i);
   });
 
   it('rejects a size it actually knows is over the limit', () => {
     expect(
-      validatePickedImage(
-        { mimeType: 'image/png', sizeBytes: LIMITS.maxImageBytes + 1, width: 1, height: 1 },
+      validatePickedMedia(
+        { kind: 'image', mimeType: 'image/png', sizeBytes: LIMITS.maxImageBytes + 1, width: 1, height: 1 },
         LIMITS,
       ),
     ).toMatch(/larger than/i);
@@ -336,7 +359,7 @@ describe('media validation', () => {
     // treating "unknown" as "empty" made every image unpublishable on those
     // devices. A size of 0 means unknown, not broken.
     expect(
-      validatePickedImage({ mimeType: 'image/jpeg', sizeBytes: 0, width: 800, height: 600 }),
+      validatePickedMedia({ kind: 'image', mimeType: 'image/jpeg', sizeBytes: 0, width: 800, height: 600 }),
     ).toBeNull();
   });
 
@@ -344,13 +367,13 @@ describe('media validation', () => {
     // `width`/`height` are documented as "can be 0 if the system did not provide
     // the width". That is unknown, not invalid — the card falls back to 4:3.
     expect(
-      validatePickedImage({ mimeType: 'image/png', sizeBytes: 2048, width: 0, height: 0 }),
+      validatePickedMedia({ kind: 'image', mimeType: 'image/png', sizeBytes: 2048, width: 0, height: 0 }),
     ).toBeNull();
   });
 
   it('accepts a normal image', () => {
     expect(
-      validatePickedImage({ mimeType: 'image/png', sizeBytes: 2048, width: 800, height: 600 }),
+      validatePickedMedia({ kind: 'image', mimeType: 'image/png', sizeBytes: 2048, width: 800, height: 600 }),
     ).toBeNull();
   });
 });
@@ -380,9 +403,9 @@ describe('which post types can carry an image', () => {
     expect(acceptsMedia('achievement')).toBe(true);
   });
 
-  it('allows no image on a text or video post', () => {
+  it('allows no media on a text post, and media on a video post', () => {
     expect(acceptsMedia('text')).toBe(false);
-    expect(acceptsMedia('video')).toBe(false);
+    expect(acceptsMedia('video')).toBe(true);
   });
 
   it('gives a gallery to an image post but a single slot to a cover or certificate', () => {
@@ -417,8 +440,20 @@ describe('mediaForType', () => {
     expect(mediaForType('text', gallery)).toEqual([]);
   });
 
-  it('drops every image for a video post', () => {
+  it('keeps only a video for a video post, and drops the images', () => {
+    // Handing `expo-image` a video renders a silent blank, so a mixed list is
+    // worse than an empty one — the images must go too.
     expect(mediaForType('video', gallery)).toEqual([]);
+
+    const mixed = [media('a'), videoMedia('v'), media('b')];
+    const kept = mediaForType('video', mixed);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].kind).toBe('video');
+  });
+
+  it('gives a video post exactly one slot, like a cover', () => {
+    expect(remainingMediaSlots('video', 0, 10)).toBe(1);
+    expect(remainingMediaSlots('video', 1, 10)).toBe(0);
   });
 
   it('never mutates the array it was given', () => {

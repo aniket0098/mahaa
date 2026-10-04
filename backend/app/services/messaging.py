@@ -65,6 +65,7 @@ from app.schemas.messaging import (
 )
 from app.schemas.users import UserSummary
 from app.services import notifications, push
+from app.services.media import avatar_url_for
 from app.services.ownership import parse_id
 
 #: How many messages a page may hold. The same ceiling the profile sections use
@@ -212,11 +213,13 @@ def _direct_key(one: uuid.UUID, two: uuid.UUID) -> str:
     return f"{first}:{second}"
 
 
-def _summary(user: User) -> UserSummary:
+def _summary(user: User, session: Session) -> UserSummary:
     """The project's minimal user representation. No private fields exist here.
 
-    ``avatar_url`` is null for the same reason it is null everywhere else: there is
-    no media row to resolve ``avatar_media_id`` against until the media phase.
+    ``avatar_url`` is resolved through ``media.avatar_url_for``. It used to be a
+    permanent ``None`` "until the media phase", so a conversation participant who
+    had saved a photo still showed initials in the thread. Same relative path,
+    same helper, every other surface.
     """
 
     return UserSummary(
@@ -225,18 +228,18 @@ def _summary(user: User) -> UserSummary:
         username=user.username,
         name=user.name,
         role=user.role.value,
-        avatar_url=None,  # media phase
+        avatar_url=avatar_url_for(user, session),
     )
 
 
-def message_read(message: Message) -> MessageRead:
+def message_read(message: Message, session: Session) -> MessageRead:
     """One message, with its body replaced by a tombstone if it was soft-deleted."""
 
     deleted = message.deleted_at is not None
     return MessageRead(
         id=str(message.id),
         conversation_id=str(message.conversation_id),
-        sender=_summary(message.sender),
+        sender=_summary(message.sender, session),
         # The column is NOT NULL and stays that way on disk; nulling it here is
         # what turns a deleted row into a tombstone instead of exposing its text.
         body=None if deleted else message.body,
@@ -353,8 +356,8 @@ def conversation_reads(
                     if conversation.last_message_at
                     else None
                 ),
-                last_message=message_read(last) if last is not None else None,
-                members=[_summary(m.user) for m in _sorted_members(conversation)],
+                last_message=message_read(last, session) if last is not None else None,
+                members=[_summary(m.user, session) for m in _sorted_members(conversation)],
                 unread_count=counts.get(conversation.id, 0),
                 muted=member.muted,
                 archived=member.archived,
@@ -641,7 +644,7 @@ def list_messages(
         items = rows[:limit]
         newest = items[-1] if items and has_more else None
         return MessagePage(
-            items=[message_read(message) for message in items],
+            items=[message_read(message, session) for message in items],
             next_cursor=(
                 encode_cursor(newest.created_at, newest.id) if newest else None
             ),
@@ -672,7 +675,7 @@ def list_messages(
     page = list(reversed(newest_first[:limit]))  # <- oldest → newest within the page
     oldest = page[0] if page and has_more else None
     return MessagePage(
-        items=[message_read(message) for message in page],
+        items=[message_read(message, session) for message in page],
         next_cursor=(
             encode_cursor(oldest.created_at, oldest.id) if oldest else None
         ),
@@ -734,7 +737,7 @@ def send(
     if payload.client_message_id is not None:
         existing = _by_key()
         if existing is not None:
-            return message_read(existing), False
+            return message_read(existing, session), False
 
     message = Message(
         conversation_id=conversation.id,
@@ -750,7 +753,7 @@ def send(
         winner = _by_key() if payload.client_message_id is not None else None
         if winner is None:
             raise _cannot_send() from exc
-        return message_read(winner), False
+        return message_read(winner, session), False
 
     # Advance the conversation's activity pointer, and only ever forwards. Two
     # messages sent in the same instant can finish committing out of order, and
@@ -814,7 +817,7 @@ def send(
     # open is served by the socket; push is the background fallback and has no
     # business being in front of it.
     push.dispatch(session, notification)
-    return message_read(message), True
+    return message_read(message, session), True
 
 
 def mark_read(

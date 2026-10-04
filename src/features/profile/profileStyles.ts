@@ -83,6 +83,61 @@ export const styles = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: 3,
   },
+  /**
+   * The avatar and its edit control as **one** positioned unit.
+   *
+   * It exists so the pencil can be anchored to the circle instead of to the page
+   * column — `avatarRing` alone is a bare flex child, and an absolutely-positioned
+   * badge inside it would have resolved against whatever ancestor happened to be
+   * positioned.
+   */
+  avatarBlock: {
+    alignSelf: 'flex-start',
+    position: 'relative',
+  },
+  /**
+   * The pencil. Sits on the circle's bottom-right edge, which is where the
+   * affordance for "change this picture" is looked for.
+   *
+   * A white disc with the accent-coloured glyph, because the disc spends its life
+   * on the token-blue cover: a blue-on-blue badge would be carried entirely by its
+   * outline, and the badge has to read as a control at a glance. The page-coloured
+   * ring and the small lift are the same two devices the avatar's own ring uses.
+   *
+   * 32 is the *visible* disc. The component supplies `hitSlop`, taking the touch
+   * target to 48px: an inline control still has to be a comfortable one
+   * (`layout.touchTargetSecondary` is the floor, and a small disc alone is under it).
+   */
+  avatarEdit: {
+    alignItems: 'center',
+    backgroundColor: colors.colorBgSurface,
+    borderColor: colors.colorBgPage,
+    borderRadius: radius.full,
+    borderWidth: 2,
+    bottom: 0,
+    height: 32,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    width: 32,
+    ...elevation.sm,
+  },
+  /** Press feedback for the two avatar controls — same idea as `BackButton`'s. */
+  pressed: {
+    opacity: 0.85,
+  },
+  /** Covers the circle being replaced while its replacement is uploading. */
+  avatarBusy: {
+    alignItems: 'center',
+    backgroundColor: colors.colorOverlay,
+    borderRadius: radius.full,
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
   nameRow: {
     alignItems: 'center',
     flexDirection: 'row',

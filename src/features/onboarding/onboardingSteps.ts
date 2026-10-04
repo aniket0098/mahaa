@@ -5,13 +5,38 @@
  * explicit. Only a `required: true` step can keep somebody in the flow, so this
  * table is the single place that decides what gates completion; the server's
  * `GET /onboarding/state` is what decides whether each of them is *done*.
+ *
+ * **Why the candidate flow is four steps.** It was eight, four of them required,
+ * and a new account could not reach the product until it had supplied a degree, a
+ * location, a bio, three catalogue skills and a set of job preferences. That is a
+ * résumé, not an introduction. The product decision is to get somebody into the
+ * app quickly and let them finish their profile later:
+ *
+ *  - **basics** — the identity a recruiter reads first. Required: without it the
+ *    feed, the composer and the post author row have nothing to show.
+ *  - **about** — education and skills, which were two separate required steps and
+ *    are now one screen (`AboutYouStep`). Required for the same reason as before,
+ *    but both halves stay editable from `/profile/education` and `/profile/skills`.
+ *  - **photo** — optional, and always was.
+ *  - **review** — the finish screen.
+ *
+ * **What was removed and where it went.** `experience`, `preferences` and `links`
+ * are gone *from onboarding only*. Nothing was deleted from the product: work
+ * history and projects live at `/profile/experience` and `/profile/projects`,
+ * preferences at `/profile/preferences`, and the Profile screen's section list is
+ * unchanged. They were removed because a gate on them stops a new user seeing
+ * anything at all, not because they were unimportant.
+ *
+ * **`links` was also the emptiest of them** — its screen was a notice card with
+ * no endpoint behind it, so it asked the user to pass through a step that could
+ * not save anything.
  */
 
 export interface StepMeta {
   key: string;
   label: string;
   description: string;
-  /** False for the skippable steps (photo, links, extra profile work). */
+  /** False for the skippable steps (photo). */
   required: boolean;
 }
 
@@ -35,39 +60,17 @@ export const CANDIDATE_STEPS: readonly StepMeta[] = [
     required: true,
   },
   {
-    key: 'education',
-    label: 'Education',
-    description: 'Add where you studied — recruiters look here for early-career roles.',
-    required: true,
-  },
-  {
-    key: 'skills',
-    label: 'Skills',
-    description: 'Add at least three skills. They power explained matching later.',
-    required: true,
-  },
-  {
-    key: 'experience',
-    label: 'Experience & projects',
-    description: 'Show what you have done so far. Optional — you can skip it.',
-    required: false,
-  },
-  {
-    key: 'preferences',
-    label: 'Preferences',
-    description: 'Set the work modes and job types you want.',
+    // The merged education + skills screen. The server counts both real rows, so
+    // the two halves stay individually optional within this one gate.
+    key: 'about',
+    label: 'About You',
+    description: 'Add your education and the skills you want to be known for.',
     required: true,
   },
   {
     key: 'photo',
     label: 'Profile photo',
     description: 'Add a photo from your camera or gallery. Optional.',
-    required: false,
-  },
-  {
-    key: 'links',
-    label: 'Resume & links',
-    description: 'Add a resume, a portfolio, or a LinkedIn link. Optional.',
     required: false,
   },
   {

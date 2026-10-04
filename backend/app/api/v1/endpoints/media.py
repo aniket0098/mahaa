@@ -117,6 +117,15 @@ async def put_photo(
     call — no delete-then-upload race that could leave a person with no photo."
     A two-step contract would leave a window where a failed avatar upload has
     already cleared the old one.
+
+    **Returns the media row, not the account.** That is §11.2's contract and the
+    route's own `MediaRead` model, and it is deliberately *not* an account here:
+    the client needs `avatar_url`, but getting it by writing this response into
+    its `users/me` cache is what silently blanked every avatar in the app — a
+    `MediaRead` has no `avatar_url` field, so the cache held an object where the
+    account should have been. The correct fix is on the client (re-read
+    `GET /users/me`, do not cache this row as the account), and it belongs there
+    rather than by redefining a spec'd response model.
     """
 
     payload = await _raw_body(request, svc._max_bytes_for(MediaKind.IMAGE))

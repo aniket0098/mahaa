@@ -130,6 +130,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       media: [
         {
           id: 'demo-media-campus-event-platform',
+          kind: 'image',
           uri: projectShot.uri,
           width: projectShot.width,
           height: projectShot.height,
@@ -164,6 +165,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       media: [
         {
           id: 'demo-media-fullstack-certificate',
+          kind: 'image',
           uri: certificateShot.uri,
           width: certificateShot.width,
           height: certificateShot.height,
@@ -197,6 +199,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       media: [
         {
           id: 'demo-media-workshop-1',
+          kind: 'image',
           uri: workshopOne.uri,
           width: workshopOne.width,
           height: workshopOne.height,
@@ -204,6 +207,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
         },
         {
           id: 'demo-media-workshop-2',
+          kind: 'image',
           uri: workshopTwo.uri,
           width: workshopTwo.width,
           height: workshopTwo.height,
@@ -211,6 +215,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
         },
         {
           id: 'demo-media-workshop-3',
+          kind: 'image',
           uri: workshopThree.uri,
           width: workshopThree.width,
           height: workshopThree.height,

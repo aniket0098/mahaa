@@ -51,14 +51,28 @@ export const BODY_PREVIEW_CHARS = 260;
 /** Lines the collapsed body shows before "See more". */
 export const BODY_PREVIEW_LINES = 4;
 
+/** What a media item is. Drives whether the card renders an image or a player. */
+export type FeedMediaKind = 'image' | 'video';
+
 /** A media item. `uri` is what a media API will return; demo posts embed one. */
 export interface FeedMedia {
   id: string;
+  /**
+   * Which renderer this needs. Image and video are not interchangeable —
+   * handing a video to `expo-image` yields a silent blank, which reads as a
+   * broken post rather than as the wrong component.
+   */
+  kind: FeedMediaKind;
   uri: string;
-  /** Intrinsic size, so the card can size it without cropping the content. */
+  /**
+   * Intrinsic size, so the card can size it without cropping the content.
+   * `0` means the server did not derive it, which is normal for video —
+   * `MediaRead` documents these as null for video and documents — and
+   * `mediaDisplayHeight` falls back to a contained 4:3 box rather than `NaN`.
+   */
   width: number;
   height: number;
-  /** Describes the image for a screen reader. Never a duplicate of the caption. */
+  /** Describes the media for a screen reader. Never a duplicate of the caption. */
   alt: string;
 }
 

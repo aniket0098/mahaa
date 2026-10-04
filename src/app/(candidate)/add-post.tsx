@@ -41,7 +41,7 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/auth/AuthContext';
 import { fetchProfile } from '@/api/profile';
 import { createPost } from '@/api/posts';
-import { fetchMediaLimits, primeMediaAuth, uploadPickedImage } from '@/api/media';
+import { fetchMediaLimits, primeMediaAuth, uploadPickedMedia, type MediaKind } from '@/api/media';
 import { queryKeys } from '@/api/queryKeys';
 import { colors, spacing } from '@/theme/tokens';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/draftStore';
@@ -68,7 +68,7 @@ import {
   mimeTypeFromName,
   remainingMediaSlots,
   validateDraft,
-  validatePickedImage,
+  validatePickedMedia,
   withStatus,
   type ComposerType,
   type Draft,
@@ -93,6 +93,11 @@ function toComposerLimits(
     maxItems: limits?.max_items_per_post ?? 10,
     maxImageBytes: 8 * 1024 * 1024,
     imageMimeTypes: limits?.image_mime_types ?? ['image/jpeg', 'image/png', 'image/webp'],
+    // Both ceilings come from `GET /media` so a limit change never needs a
+    // client release. The defaults are only what shows for the moment before
+    // that request answers.
+    maxVideoBytes: limits?.max_bytes ?? 10 * 1024 * 1024,
+    videoMimeTypes: limits?.video_mime_types ?? ['video/mp4', 'video/quicktime'],
     videoDurationEnforced: limits?.video_duration_enforced ?? false,
   };
 }
@@ -123,7 +128,7 @@ export default function CandidateAddPostScreen() {
   const busy = phase !== 'editing';
   const submittable = canSubmit(draft, limits) && !busy;
   // An image post takes a gallery; a project takes one cover image; an
-  // achievement one certificate image. Video takes none yet.
+  // achievement one certificate image. A video post takes exactly one video.
   const showMediaPicker = acceptsMedia(draft.type);
   const remainingSlots = remainingMediaSlots(draft.type, draft.media.length, limits.maxItems);
 
@@ -211,10 +216,17 @@ export default function CandidateAddPostScreen() {
       return;
     }
 
+    // A video post takes one video; the image-bearing types take stills. The
+    // picker is asked for exactly that, so the OS never offers a file this
+    // post type would then have to reject.
+    const wantsVideo = draft.type === 'video';
+
     const result = await launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: remainingSlots,
+      mediaTypes: wantsVideo ? ['videos'] : ['images'],
+      allowsMultipleSelection: !wantsVideo,
+      // One video per post: a second would be a playlist, which this composer
+      // does not build, so the picker is capped at the real slot count.
+      selectionLimit: wantsVideo ? 1 : remainingSlots,
       quality: 1,
     });
     if (result.canceled) return;
@@ -223,9 +235,18 @@ export default function CandidateAddPostScreen() {
     const rejected: string[] = [];
 
     for (const asset of result.assets) {
+      // The picker knows what the user chose; the server decides what the bytes
+      // really are. Both are recorded, because they are different questions.
+      const kind: MediaKind = asset.mimeType?.startsWith('video/')
+        ? 'video'
+        : wantsVideo
+          ? 'video'
+          : 'image';
+
       const candidate = {
         localUri: asset.uri,
-        fileName: asset.fileName ?? 'Image',
+        kind,
+        fileName: asset.fileName ?? (kind === 'video' ? 'Video' : 'Image'),
         // The picker's type is optional; the server's allow-list is the real
         // authority, and an unknown type is resolved from the file extension.
         mimeType: asset.mimeType ?? mimeTypeFromName(asset.fileName),
@@ -238,7 +259,7 @@ export default function CandidateAddPostScreen() {
         width: asset.width,
         height: asset.height,
       };
-      const problem = validatePickedImage(candidate, limits);
+      const problem = validatePickedMedia(candidate, limits);
       if (problem) {
         rejected.push(problem);
         continue;
@@ -268,12 +289,17 @@ export default function CandidateAddPostScreen() {
     if (rejected.length > 0) {
       setNotice({
         tone: 'warning',
-        title:
-          rejected.length === 1 ? 'One image was skipped' : `${rejected.length} images were skipped`,
+        title: draft.type === 'video'
+          ? 'That video was skipped'
+          : rejected.length === 1
+            ? 'One image was skipped'
+            : `${rejected.length} images were skipped`,
         description: rejected[0],
       });
     }
-  }, [limits, remainingSlots, userId]);
+    // `draft.type` is read below to decide what the picker offers, so leaving it
+    // out would let a stale closure offer images after a switch to Video.
+  }, [limits, remainingSlots, userId, draft.type]);
 
   const removeImage = useCallback((localUri: string) => {
     setDraft((current) => ({
@@ -304,7 +330,7 @@ export default function CandidateAddPostScreen() {
       mark({ status: 'uploading', fraction: 0, errorMessage: undefined });
 
       try {
-        const uploaded = await uploadPickedImage(item, (progress) => {
+        const uploaded = await uploadPickedMedia(item, (progress) => {
           mark({ fraction: progress.fraction });
         });
         mark({ status: 'done', fraction: 1, mediaId: uploaded.id });
@@ -341,10 +367,23 @@ export default function CandidateAddPostScreen() {
       if (failed) {
         // The draft is untouched: the caption and the images are all still here.
         setPhase('editing');
+        // A video failure said "image" in every clause. The kind comes from
+        // the draft item the failed slot belongs to, so the copy matches what
+        // the person actually chose.
+        const failedKind =
+          draft.media.find((item) => item.localUri === failed.localUri)?.kind ===
+            'video'
+            ? 'video'
+            : 'image';
         setNotice({
           tone: 'danger',
-          title: 'An image did not upload',
-          description: `${failed.errorMessage ?? 'The upload did not finish.'} Your draft is kept — retry that image, then publish again.`,
+          title:
+            failedKind === 'video'
+              ? 'A video did not upload'
+              : 'An image did not upload',
+          description:
+            `${failed.errorMessage ?? 'The upload did not finish.'} Your draft is kept — retry that` +
+            `${failedKind}, then publish again.`,
         });
         return;
       }
@@ -466,12 +505,15 @@ export default function CandidateAddPostScreen() {
               <AppText variant="caption" tone="tertiary" style={s.sectionLabel}>
                 {draft.type === 'image'
                   ? 'Images'
-                  : draft.type === 'project'
-                    ? 'Cover image'
-                    : 'Certificate image'}
+                  : draft.type === 'video'
+                    ? 'Video'
+                    : draft.type === 'project'
+                      ? 'Cover image'
+                      : 'Certificate image'}
               </AppText>
               <ImageGrid
                 media={draft.media}
+                mediaKind={draft.type === 'video' ? 'video' : 'image'}
                 canAddMore={remainingSlots > 0}
                 onPick={() => void pickImages()}
                 onRemove={removeImage}

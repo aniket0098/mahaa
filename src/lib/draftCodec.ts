@@ -63,6 +63,10 @@ function readMedia(value: unknown): DraftMedia[] {
     return [
       {
         localUri,
+        // A draft written before video support has no `kind`. Those could only
+        // ever have held images, so `image` is the truthful default rather than
+        // a guess — and it means an old draft still restores.
+        kind: item.kind === 'video' ? 'video' : 'image',
         fileName: readString(item.fileName),
         mimeType: readString(item.mimeType),
         sizeBytes: typeof item.sizeBytes === 'number' ? item.sizeBytes : 0,

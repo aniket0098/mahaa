@@ -97,6 +97,15 @@ interface PostPage {
 /** What the composer sends. `kind` is re-derived server-side, never trusted. */
 export interface CreatePostInput {
   readonly kind: FeedPostKind;
+  /**
+   * The feed category the server stores verbatim.
+   *
+   * **Optional here, never optional on the wire.** `PostCreate.category` is
+   * required, and the server keeps whatever value the client sends rather than
+   * deriving one, so omitting it is a 422. The composer supplies the precise
+   * category; `createPost` falls back to `community` so no caller can 422.
+   */
+  readonly category?: FeedCategory;
   readonly body?: string | null;
   readonly title?: string | null;
   readonly mediaIds?: readonly string[];
@@ -126,10 +135,16 @@ function mapPost(wire: WirePost): FeedPost {
       .sort((a, b) => a.position - b.position)
       .map((item) => ({
         id: item.id,
+        kind: item.kind === 'video' ? 'video' : 'image',
         uri: absoluteMediaUri(item.uri),
+        // Video carries no server-derived dimensions (`MediaRead` documents
+        // them as null for video), so 0 here means "unknown" and the card
+        // falls back to a contained box rather than dividing by zero.
         width: item.width ?? 0,
         height: item.height ?? 0,
-        alt: 'Image attached to this post.',
+        alt: item.kind === 'video'
+          ? 'Video attached to this post.'
+          : 'Image attached to this post.',
       })),
     project: wire.project
       ? {
@@ -158,7 +173,12 @@ function mapPost(wire: WirePost): FeedPost {
     author: {
       name: wire.author.name,
       headline: wire.author.headline,
-      avatarUrl: wire.author.avatar_url,
+      // **The same treatment media uris get, and for the same reason.** This
+      // used to pass the raw `served_at` path straight through, so a relative
+      // `/api/v1/media/<id>` never resolved to a host and every author avatar
+      // silently fell back to initials — a bug that looks like "this person has
+      // no photo" rather than like a broken URL.
+      avatarUrl: wire.author.avatar_url ? absoluteMediaUri(wire.author.avatar_url) : null,
       // A post of the caller's own opens the profile route; another author's does
       // not, because the app has no other-user profile screen.
       profileHref: wire.author.is_self ? '/profile' : null,
@@ -210,7 +230,12 @@ export async function fetchMyPosts(
  * published before the server has answered 201.
  */
 export async function createPost(input: CreatePostInput): Promise<FeedPost> {
-  const body: Record<string, unknown> = { kind: input.kind };
+  // `community` is the fallback so no caller can 422 by forgetting a field;
+  // the composer supplies the precise category for project and achievement.
+  const body: Record<string, unknown> = {
+    kind: input.kind,
+    category: input.category ?? 'community',
+  };
   if (input.body !== undefined) body.body = input.body;
   if (input.title !== undefined) body.title = input.title;
   if (input.mediaIds && input.mediaIds.length > 0) body.media_ids = input.mediaIds;

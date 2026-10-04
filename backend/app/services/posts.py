@@ -136,6 +136,12 @@ def _author_out(author: User, session: Session, is_self: bool) -> PostAuthorOut:
 
     A missing profile row is not an error: a post is publishable before onboarding
     finishes, and the card then shows no headline, which is the truth.
+
+    ``public_id`` and ``username`` are read straight off the ``users`` row, which
+    is where they have always lived. They are the two handles a card needs to
+    name and link its author, and deriving them here costs nothing — the row is
+    already loaded — whereas having the client correlate them would mean a second
+    request per post.
     """
     from app.models.profile import Profile
     from app.services.media import avatar_url_for
@@ -145,6 +151,8 @@ def _author_out(author: User, session: Session, is_self: bool) -> PostAuthorOut:
     )
     return PostAuthorOut(
         name=author.name,
+        public_id=author.public_id,
+        username=author.username,
         headline=headline,
         avatar_url=avatar_url_for(author, session),
         verified=False,

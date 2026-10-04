@@ -20,23 +20,17 @@ import { fetchMyInstitutions, requestInstitutionVerification } from '@/api/insti
 import { fetchProfile } from '@/api/profile';
 import { queryKeys } from '@/api/queryKeys';
 import { AppText } from '@/components/ui/AppText';
-import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { BasicsStep } from '@/features/onboarding/BasicsStep';
 import { CollegeContactStep } from '@/features/onboarding/CollegeContactStep';
 import { CompanyStep } from '@/features/onboarding/CompanyStep';
-import { EducationStep } from '@/features/onboarding/EducationStep';
-import { ExperienceStep } from '@/features/onboarding/ExperienceStep';
+import { AboutYouStep } from '@/features/onboarding/AboutYouStep';
 import { InstitutionStep } from '@/features/onboarding/InstitutionStep';
 import { PhotoStep } from '@/features/onboarding/PhotoStep';
-import { PreferencesStep } from '@/features/onboarding/PreferencesStep';
 import { ProgramsStep } from '@/features/onboarding/ProgramsStep';
 import { RecruiterProfileStep } from '@/features/onboarding/RecruiterProfileStep';
 import { ReviewStep } from '@/features/onboarding/ReviewStep';
-import { SkillsStep } from '@/features/onboarding/SkillsStep';
 import { VerificationStep } from '@/features/onboarding/VerificationStep';
-import { StepBody } from '@/features/onboarding/StepBody';
-import { stepStyles } from '@/features/onboarding/onboardingStyles';
 import { REVIEW_STEP_KEY } from '@/features/onboarding/onboardingSteps';
 
 export interface StepProps {
@@ -57,18 +51,13 @@ export function OnboardingStepView(props: OnboardingStepViewProps) {
   switch (props.stepKey) {
     case 'basics':
       return <BasicsView {...props} />;
-    case 'education':
-      return <EducationStep {...props} />;
-    case 'skills':
-      return <SkillsStep {...props} />;
-    case 'experience':
-      return <ExperienceStep {...props} />;
-    case 'preferences':
-      return <PreferencesStep {...props} />;
+    // Education and skills, merged into one screen. The two separate steps are
+    // gone from the wizard, not from the product: `/profile/education` and
+    // `/profile/skills` are unchanged and still edit the same rows.
+    case 'about':
+      return <AboutYouStep {...props} />;
     case 'photo':
       return <PhotoStep {...props} />;
-    case 'links':
-      return <LinksNotice {...props} />;
     case 'company':
       return <CompanyStep {...props} />;
     case 'institution':
@@ -97,40 +86,6 @@ export function OnboardingStepView(props: OnboardingStepViewProps) {
   }
 }
 
-/**
- * Resume, certificates, and links ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â honest notice, not a form.
- *
- * The upload endpoint exists (`POST /resumes`) but a document picker is separate
- * work. The step says so plainly and stays skippable, which is better than a Skip
- * button that silently discards a file somebody just picked.
- *
- * It takes the shared step props rather than inventing its own, so Back keeps
- * stepping backwards through the wizard instead of jumping forward.
- */
-function LinksNotice({ onNext, busy, canGoBack, onBack }: StepProps) {
-  return (
-    <StepBody
-      onNext={() => onNext()}
-      ready
-      busy={busy}
-      canGoBack={canGoBack}
-      onBack={onBack}
-      onSkip={() => onNext()}
-      skipLabel="Skip for now">
-      <Card style={stepStyles.card}>
-        <AppText variant="h3" accessibilityRole="header">
-          Resume & links
-        </AppText>
-        <AppText variant="body" tone="secondary">
-          Resumes, certificates, and professional links are optional. You can add them from your
-          profile at any time ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â nothing here is needed to finish onboarding.
-        </AppText>
-      </Card>
-    </StepBody>
-  );
-}
-
-/** Basics seeds its fields from the stored identity, so it waits for the read. */
 function BasicsView({ onNext, busy, canGoBack, onBack }: StepProps) {
   const profile = useQuery({ queryKey: queryKeys.profile, queryFn: fetchProfile });
   if (profile.isLoading) return <Skeleton height={160} />;

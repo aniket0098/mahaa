@@ -21,7 +21,7 @@
  */
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ScrollView, StyleSheet } from 'react-native';
 
@@ -33,9 +33,25 @@ import { useAuth } from '@/auth/AuthContext';
 import { homePathForRole } from '@/auth/roleHome';
 import { OnboardingStepView } from '@/features/onboarding/OnboardingStepView';
 import { StepHeader } from '@/features/onboarding/StepHeader';
+import {
+  describeIncompleteStep,
+  mayAdvance,
+  outstandingSteps,
+} from '@/features/onboarding/aboutYouSave';
 import { resolveStep, isLastStep, stepStatus } from '@/features/onboarding/onboardingLogic';
 import { stepsForRole } from '@/features/onboarding/onboardingSteps';
 import { spacing } from '@/theme/tokens';
+
+/**
+ * Key → human label for this role's steps, so a refusal can name the step.
+ *
+ * Read from the client's own step table rather than the server's: the labels are
+ * presentation, and the server's `hint` (which *is* shown) already carries the
+ * server's wording. All this adds is the name of the screen the person is on.
+ */
+function stepLabels(role: string | undefined): Record<string, string> {
+  return Object.fromEntries(stepsForRole(role).map((step) => [step.key, step.label]));
+}
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -113,6 +129,16 @@ export default function OnboardingScreen() {
   }, [queryClient, role, router]);
 
   /**
+   * The save the person last pressed Continue with.
+   *
+   * Kept so the banner's Retry repeats *that* operation rather than only hiding
+   * itself. Previously Retry cleared the message and left the person to press
+   * Continue again, which is what produced the reported "Next → Retry → Next →
+   * works" sequence; a transient failure now recovers in one press.
+   */
+  const lastSave = useRef<(() => Promise<unknown>) | undefined>(undefined);
+
+  /**
    * Save, then advance.
    *
    * The save runs *before* the move, and a failure stops the move. That ordering is
@@ -124,12 +150,29 @@ export default function OnboardingScreen() {
     async (save?: () => Promise<unknown>) => {
       setBusy(true);
       setFatal(null);
+      if (save) lastSave.current = save;
       try {
         if (save) await save();
-        // Re-read before moving: a step is only "done" once the server says so.
+        /*
+         * Re-read before moving: a step is only "done" once the server says so.
+         *
+         * `staleTime: 0` is load-bearing and is not a tuning knob. `fetchQuery`
+         * answers from cache **without making a request** whenever the entry is
+         * still fresh, and the client default is 30 seconds (`@/api/queryClient`).
+         * So this read returned the onboarding state from *before* the save that
+         * had just completed: the About You step still looked incomplete,
+         * `nowComplete` was false, and every first attempt at About You raised
+         * "That did not register as saved" — the reported Retry bug. Pressing
+         * Retry and Continue again appeared to fix it only because by then the
+         * 30 seconds had elapsed and the read finally reached the server.
+         *
+         * The sibling `handleFinish` below already passes `staleTime: 0` for the
+         * same reason; this read had simply been missed.
+         */
         const fresh = await queryClient.fetchQuery({
           queryKey: queryKeys.onboarding,
           queryFn: fetchOnboardingState,
+          staleTime: 0,
         });
 
         // The review step is where the wizard ends, so advancing past it has to
@@ -149,16 +192,28 @@ export default function OnboardingScreen() {
           return;
         }
 
-        const nowComplete =
-          fresh.steps.find((s) => s.key === current?.key)?.complete ?? false;
-        if (nowComplete || current?.required === false) {
+        const nowComplete = mayAdvance(fresh.steps, current?.key ?? '', current?.required);
+        if (nowComplete) {
           goTo(index + 1);
           return;
         }
-        // The save returned without error but the server still disagrees. Refusing
-        // to move is the honest outcome: advancing would strand the person in a
-        // wizard that looks finished and can never complete.
-        setFatal('That did not register as saved. Check the highlighted fields and try again.');
+        /*
+         * The save returned without error but the server still disagrees.
+         * Refusing to move is the honest outcome: advancing would strand the
+         * person in a wizard that looks finished and can never complete.
+         *
+         * The message **names the step that is still outstanding**, using the
+         * server's own hint. The old copy was "That did not register as saved.
+         * Check the highlighted fields and try again." — which named no field,
+         * pointed at a form that was already correct, and described a save that
+         * had in fact succeeded. That combination is what made this look
+         * unrecoverable: the honest reason was never shown.
+         *
+         * `staleTime: 0` above is what makes this verdict trustworthy, and it is
+         * not a tuning knob — see the note there.
+         */
+        const outstanding = outstandingSteps(fresh.steps, stepLabels(role));
+        setFatal(describeIncompleteStep(outstanding[0]));
       } catch (error) {
         setFatal(
           error instanceof Error ? error.message : 'Something went wrong. Please try again.',
@@ -167,7 +222,13 @@ export default function OnboardingScreen() {
         setBusy(false);
       }
     },
-    [current, goTo, handleFinish, index, queryClient, steps.length],
+    /*
+     * `role` is a dependency because `stepLabels(role)` reads it: leaving it out
+     * would let this callback label an outstanding step with a previous role's
+     * screen names, which is exactly the kind of wrong-but-plausible message
+     * that sends somebody hunting through the wrong wizard.
+     */
+    [current, goTo, handleFinish, index, queryClient, role, steps.length],
   );
 
 
@@ -210,7 +271,14 @@ export default function OnboardingScreen() {
           <StatusBanner
             title="That did not save"
             description={fatal}
-            onRetry={() => setFatal(null)}
+            /*
+             * Retry repeats the save operation itself, not just the message's
+             * dismissal — so a transient failure is recovered by one press rather
+             * than requiring the person to find Continue again. `handleNext`
+             * re-reads the server's state on the way through, so a retry that now
+             * succeeds advances exactly like a first attempt would.
+             */
+            onRetry={() => void handleNext(lastSave.current)}
           />
         ) : null}
         {state.isError ? (

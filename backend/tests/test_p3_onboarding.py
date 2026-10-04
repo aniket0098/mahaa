@@ -10,25 +10,47 @@ Two properties are load-bearing and both are asserted here:
 
 from __future__ import annotations
 
+#: The wizard's four screens, in the order ``CANDIDATE_STEPS`` presents them.
+#: ``about`` is the merged education + skills step; ``experience``, ``preferences``
+#: and ``links`` are gone from onboarding (they remain profile sections).
 CANDIDATE_KEYS = [
     "basics",
-    "education",
-    "skills",
-    "experience",
-    "preferences",
+    "about",
     "photo",
-    "links",
     "review",
 ]
 
 #: The steps that gate completion for a candidate, in the client's order.
-CANDIDATE_REQUIRED = ["basics", "education", "skills", "preferences"]
+CANDIDATE_REQUIRED = ["basics", "about"]
 
 
 def _state(api_client, account) -> dict:
     response = api_client.get("/api/v1/onboarding/state", headers=account.headers)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _about(api_client, account) -> dict:
+    """The ``about`` step's own verdict, so a test reads as a claim about it."""
+
+    return next(step for step in _state(api_client, account)["steps"] if step["key"] == "about")
+
+
+def _add_skill(api_client, account, skill) -> None:
+    """Attach a catalogue row to the account, failing loudly if it is refused.
+
+    Skills are created through ``make_skill`` rather than read out of
+    ``GET /skills/catalog``, because the catalogue is deployment state: reading the
+    first three rows makes the test depend on whatever was seeded, and inserting
+    rows with fixed names collides with the seeded catalogue when it is present.
+    """
+
+    response = api_client.post(
+        "/api/v1/profile/skills",
+        json={"skill_id": str(skill.id), "level": "intermediate"},
+        headers=account.headers,
+    )
+    assert response.status_code == 201, response.text
 
 
 def test_onboarding_requires_a_token(api_client) -> None:
@@ -113,26 +135,122 @@ def test_writing_to_the_profile_moves_the_state(api_client, candidate) -> None:
     assert after["state"] == "in_progress"
     basics = next(s for s in after["steps"] if s["key"] == "basics")
     assert basics["complete"] is True
-    # Education and skills are still outstanding, so the wizard has not moved on.
-    assert after["next_step"] == "education"
+    # "About You" (education + skills) is still outstanding, so the wizard has not
+    # moved on.
+    assert after["next_step"] == "about"
 
 
 def test_the_percent_rises_only_when_a_real_step_completes(
-    api_client, candidate
+    api_client, candidate, make_skill
 ) -> None:
-    before = _state(api_client, candidate)["percent"]
+    """One education row completes ``about`` -- and only a real row does.
 
-    api_client.post(
+    This test used to assert the opposite: that one education row was *half* the
+    merged step and three catalogue skills were needed for the other half. That
+    rule was the reported mobile bug. ``AboutYouStep`` enabled Continue on an
+    institution alone, so somebody with one education row and no skills received a
+    clean ``201`` and was then told by this endpoint that the save had not
+    registered -- and Retry, which replays the same save, could never clear it.
+
+    The gate is now exactly what the screen can satisfy: one education row.
+    """
+
+    # A brand-new account has only `review` done, which is always complete by
+    # design (it is the end of the wizard, not a gate). So the floor is one of
+    # four steps, not zero -- asserted explicitly so the arithmetic below is
+    # anchored rather than assumed.
+    before = _state(api_client, candidate)["percent"]
+    assert before == 25
+
+    # No education row yet: the step is incomplete, and saying so is honest.
+    assert _about(api_client, candidate)["complete"] is False
+
+    created = api_client.post(
         "/api/v1/profile/education",
         json={"institution": "Somewhere"},
         headers=candidate.headers,
     )
+    assert created.status_code == 201, created.text
+
+    # `basics` is still outstanding on this fresh account, so `next_step` names
+    # the *first* gate, not the one this test just satisfied.
+    midway = _state(api_client, candidate)
+    assert _about(api_client, candidate)["complete"] is True
+    assert midway["next_step"] == "basics"
+
+    # The wizard percent is `round(done / total * 100)` over four steps: `review`
+    # and `about` done is two of four, i.e. 50, up from one of four (25) before
+    # the education row existed. Asserted against the step count rather than merely
+    # "it went up", because at this granularity several adjacent transitions
+    # round to the same integer.
+    assert midway["percent"] == 50
+
+    # Skills are a recommendation. Adding them raises the *profile* completeness
+    # score without being required by the wizard, which is the whole point of
+    # keeping the two numbers separate. Seeded via `make_skill` rather than read
+    # out of the catalogue, so this test does not depend on the catalogue being
+    # seeded (and does not collide with it when it is).
+    for name in ("Alpha", "Beta", "Gamma"):
+        _add_skill(api_client, candidate, make_skill(name))
 
     after = _state(api_client, candidate)
+    assert _about(api_client, candidate)["complete"] is True
+    # Skills do not complete a step the server already considers done, so the
+    # wizard percent is unmoved by them. That separation is the point: adding
+    # skills improves the profile score, not the wizard's position.
+    assert after["percent"] == 50
 
-    assert after["percent"] > before
-    education = next(s for s in after["steps"] if s["key"] == "education")
-    assert education["complete"] is True
+    # The profile score, unlike the wizard gate, still wants three skills. This is
+    # where the three-skill rule lives now: it describes how good a profile is,
+    # and can never be read as "your save failed".
+    completeness = api_client.get("/api/v1/profile/completeness", headers=candidate.headers)
+    skills = next(s for s in completeness.json()["sections"] if s["key"] == "skills")
+    assert skills["complete"] is True
+
+
+def test_about_completes_with_zero_skills(api_client, candidate) -> None:
+    """The regression, stated as its own test so it cannot come back quietly.
+
+    Every prior failure mode of this bug was somebody with **fewer than three
+    skills** being told their save did not register. This asserts the step is
+    complete the moment the education row exists, with no skill rows at all.
+    """
+
+    api_client.post(
+        "/api/v1/profile/education",
+        json={"institution": "ABC Institute of Technology", "degree": "B.Tech"},
+        headers=candidate.headers,
+    )
+
+    skills = api_client.get("/api/v1/profile/skills", headers=candidate.headers)
+    assert skills.json()["total"] == 0
+
+    assert _about(api_client, candidate)["complete"] is True
+
+    # And the wizard is genuinely finishable: only `basics` remains.
+    state = _state(api_client, candidate)
+    outstanding = [s["key"] for s in state["steps"] if s["required"] and not s["complete"]]
+    assert outstanding == ["basics"]
+
+
+def test_about_is_still_incomplete_without_an_education_row(
+    api_client, candidate, make_skill
+) -> None:
+    """The gate is relaxed on *skills*, never on the step's own subject.
+
+    The fix removes a condition the screen could not satisfy. It must not remove
+    the one it can: a candidate with three catalogue skills and no education is
+    still outstanding, because there is nothing on their profile to have studied.
+    """
+
+    for name in ("Delta", "Epsilon", "Zeta"):
+        _add_skill(api_client, candidate, make_skill(name))
+
+    skills = api_client.get("/api/v1/profile/skills", headers=candidate.headers)
+    assert skills.json()["total"] == 3
+
+    assert _about(api_client, candidate)["complete"] is False
+    assert _state(api_client, candidate)["next_step"] == "basics"
 
 
 def test_next_step_names_the_first_required_step_outstanding(

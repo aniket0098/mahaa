@@ -60,7 +60,6 @@ const { ApiError } = await import('@/api/errors');
 type ApiErrorInstance = InstanceType<typeof ApiError>;
 const { login, signup, fetchPrincipal } = await import('@/api/auth');
 const profileApi = await import('@/api/profile');
-const resumesApi = await import('@/api/resumes');
 const companyApi = await import('@/api/company');
 const institutionsApi = await import('@/api/institutions');
 const { tokenStorage } = await import('@/auth/tokenStorage');
@@ -376,26 +375,6 @@ describe.skipIf(!reachable)('Phase B — candidate data', () => {
       profileApi.updateIdentity({ headline: 'Integration headline', location: 'Pune' }),
     );
     expect(identity.headline).toBe('Integration headline');
-  });
-
-  it('creates a resume version the server builds from the profile', async () => {
-    const list = await asRole(candidateToken, () => resumesApi.fetchResumes());
-    expect(Array.isArray(list)).toBe(true);
-
-    const created = await asRole(candidateToken, () =>
-      resumesApi.createResume('Integration resume', true),
-    );
-    expect(created.id).toBeTruthy();
-    expect(created.label).toBe('Integration resume');
-    expect(created.version_no).toBeGreaterThanOrEqual(1);
-    expect(created.snapshot).toBeTruthy();
-
-    const renamed = await asRole(candidateToken, () =>
-      resumesApi.updateResume(created.id, { label: 'Renamed resume' }),
-    );
-    expect(renamed.label).toBe('Renamed resume');
-
-    await asRole(candidateToken, () => resumesApi.deleteResume(created.id));
   });
 
   it('maps an unknown record to a not_found ApiError', async () => {

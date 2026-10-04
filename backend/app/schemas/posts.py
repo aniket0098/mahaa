@@ -18,8 +18,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.url_safety import validate_public_url
 from app.models.enums import MediaKind, PostCategory, PostKind
 
 MAX_BODY_CHARS = 5000
@@ -47,6 +48,18 @@ class ProjectPayload(BaseModel):
     role: str | None = Field(default=None, max_length=200)
     source_url: str | None = Field(default=None, max_length=2000)
     live_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("source_url", "live_url")
+    @classmethod
+    def _links_are_safe(cls, value: str | None) -> str | None:
+        """``http``/``https`` only — the payload is rendered as a clickable link.
+
+        Without this a ``javascript:`` URL could be stored and run when a reader
+        activated the card, and the client's check would be the only thing in the
+        way. Blank stays ``None``: the field is nullable and clearing it is a
+        legitimate edit.
+        """
+        return validate_public_url(value)
 
 
 class AchievementPayload(BaseModel):
@@ -161,7 +174,7 @@ class PostMediaOut(BaseModel):
 
 
 class PostAuthorOut(BaseModel):
-    """``author`` — §9.2's five fields, all derived from the caller's view.
+    """``author`` — §9.2's identity fields, plus the two handles §20 needs.
 
     ``verified`` is hard-coded ``False`` in the service. §9.2: it "**must default
     to `false`` and require a real signal. The client renders a badge from this
@@ -170,11 +183,21 @@ class PostAuthorOut(BaseModel):
 
     ``is_self`` is computed per request against the authenticated principal, which
     is why this is a response schema and not a column.
+
+    ``public_id`` and ``username`` are carried here rather than left to the client
+    to correlate: the feed renders an author's handle, and a card that could not
+    name or link its author was forcing either a guess or a second request per
+    post. Both are columns on ``users`` that already exist — this widens the
+    response, not the schema.
     """
 
     model_config = ConfigDict(frozen=True)
 
     name: str
+    #: The shareable, immutable handle. This is what an author link carries.
+    public_id: str
+    #: The searchable handle. Changeable by its owner, so it is a label, not a key.
+    username: str
     headline: str | None
     avatar_url: str | None
     verified: bool

@@ -26,6 +26,12 @@
  * supply (PRODUCT_DECISIONS S8).
  *
  * The avatar and the name both come from the real authenticated principal.
+ *
+ * **The avatar's image comes from `GET /profile`, not from the principal.**
+ * `GET /auth/me` is the *session*: it answers "which role tree do I render", and
+ * it carries no avatar at all. The identity half of the profile aggregate is the
+ * one read model that does, so the header reads that. It used to pass no `src` at
+ * all, which guaranteed this avatar could only ever be initials.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -33,7 +39,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Animated, Pressable, TextInput, View } from 'react-native';
 
-import { searchSkillCatalog } from '@/api/profile';
+import { fetchProfile, searchSkillCatalog } from '@/api/profile';
 import { queryKeys } from '@/api/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { AppIcon } from '@/components/ui/AppIcon';
@@ -61,6 +67,16 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
 
   const trimmed = query.trim();
   const hasQuery = trimmed.length >= MIN_QUERY_LENGTH;
+
+  /*
+   * The header's own avatar. `GET /auth/me` is the session and carries no avatar,
+   * so the one read model that does — the profile aggregate's identity — is what
+   * this asks. It is the *same* cached query the Profile screen reads, so this
+   * costs no extra request on a screen that is usually already showing it, and
+   * invalidating `queryKeys.profile` after a photo save updates this with it.
+   */
+  const profile = useQuery({ queryKey: queryKeys.profile, queryFn: fetchProfile });
+  const avatarUrl = profile.data?.identity.avatar_url ?? null;
 
   // Menu <-> close morph: a quick fade-scale-rotate keeps the swap from
   // popping, without a second icon ever on screen.
@@ -248,7 +264,7 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
               accessibilityLabel={`Open your profile (${principal.name})`}
               accessibilityHint="Opens your profile">
               <View style={styles.avatarRing}>
-                <Avatar name={principal.name} size={32} />
+                <Avatar name={principal.name} src={avatarUrl} size={32} />
               </View>
             </Pressable>
           </>

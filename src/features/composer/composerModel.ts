@@ -7,13 +7,17 @@
  * valid, the counter matches the server's limit, and the video option is disabled
  * with a stated reason rather than hidden or half-built.
  *
- * **The video type is deliberately unavailable.** Video upload needs a
- * server-side duration check, and the API publishes
- * `video_duration_enforced: false` because no decoder is installed. So the option
- * is shown, clearly marked, and cannot be selected — rather than letting someone
- * pick it and hit a wall, or hiding a type the roadmap has.
+ * **Video is available, and nothing about it is claimed that is not true.** The
+ * server accepts `video/mp4` and `video/quicktime` under the same `max_bytes`
+ * ceiling as images, and it publishes `video_duration_enforced: false` because
+ * no decoder is installed. So this file enforces the **real** limits — size and
+ * MIME type — and deliberately enforces **no duration rule at all**. There is no
+ * "verified duration" anywhere in this file because there is nothing to verify
+ * it against; inventing a 30-second cap the server does not enforce would
+ * refuse files the API would happily accept.
  */
 
+import type { MediaKind } from '@/api/media';
 import type { CreatePostInput, WireAchievement, WireProject } from '@/api/posts';
 
 export type ComposerType = 'text' | 'image' | 'video' | 'project' | 'achievement';
@@ -23,14 +27,17 @@ export interface ComposerTypeOption {
   readonly label: string;
   readonly hint: string;
   readonly icon: { readonly ios: string; readonly android: string };
-  /** False only for video, and only while the server cannot verify a duration. */
+  /**
+   * Whether this type can be chosen at all.
+   *
+   * True for every type the server accepts today. Kept as a field rather than
+   * deleted so a future type can be listed honestly-unavailable, with a reason,
+   * rather than vanishing from the UI.
+   */
   readonly enabled: boolean;
   /** Why it is unavailable. Shown verbatim; never blank. */
   readonly unavailableReason?: string;
 }
-
-export const VIDEO_UNAVAILABLE_REASON =
-  'Video uploads arrive with the next stage — a 30-second limit needs a server-side duration check that does not exist yet.';
 
 export const COMPOSER_TYPES: readonly ComposerTypeOption[] = [
   {
@@ -50,10 +57,11 @@ export const COMPOSER_TYPES: readonly ComposerTypeOption[] = [
   {
     value: 'video',
     label: 'Video',
-    hint: 'A short demo of your work',
+    // Says what is actually enforced. It does not promise a duration limit,
+    // because the server does not enforce one.
+    hint: 'An MP4 or QuickTime video of your work',
     icon: { ios: 'video', android: 'videocam' },
-    enabled: false,
-    unavailableReason: VIDEO_UNAVAILABLE_REASON,
+    enabled: true,
   },
   {
     value: 'project',
@@ -77,23 +85,49 @@ export interface ComposerLimits {
   readonly maxItems: number;
   readonly maxImageBytes: number;
   readonly imageMimeTypes: readonly string[];
+  /** The server's video ceiling. Separate so a future split cannot silently apply. */
+  readonly maxVideoBytes: number;
+  readonly videoMimeTypes: readonly string[];
+  /**
+   * Whether the server enforces a duration limit.
+   *
+   * **Read, and used to decide what the UI may claim.** It is false today, so
+   * nothing in this file mentions duration. It is kept because the server
+   — not the client — decides, and flipping it must not need a rewrite.
+   */
   readonly videoDurationEnforced: boolean;
 }
 
+/** The documented server ceiling, used only while `GET /media` has not answered. */
 export const DEFAULT_LIMITS: ComposerLimits = {
   maxBodyChars: 5000,
   maxItems: 10,
   maxImageBytes: 8 * 1024 * 1024,
   imageMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  // `services/media.py` publishes one `MAX_BYTES` for images and video alike.
+  maxVideoBytes: 10 * 1024 * 1024,
+  videoMimeTypes: ['video/mp4', 'video/quicktime'],
   videoDurationEnforced: false,
 };
 
-/** One picked image, before it is uploaded. */
+/**
+ * One picked file, before it is uploaded.
+ *
+ * **`kind` is stored, not inferred from the file name.** The picker decides
+ * what the user chose, the server decides what the bytes really are (it sniffs
+ * magic bytes and rejects a mismatch), and this field records what was asked
+ * for. A draft restored weeks later still knows it was a video.
+ *
+ * **No bytes are ever held here** — only the `file://` uri and metadata. A
+ * 10 MB video in AsyncStorage would be both useless and unrecoverable.
+ */
 export interface DraftMedia {
   readonly localUri: string;
+  readonly kind: MediaKind;
   readonly fileName: string;
   readonly mimeType: string;
   readonly sizeBytes: number;
+  /** 0 means the picker did not report it, which is normal for video. */
   readonly width: number;
   readonly height: number;
 }
@@ -187,6 +221,13 @@ export function validateDraft(
     }
   }
 
+  // A video type with no video is an empty shell, so it is refused the same way
+  // an image post with no image is. The message does not mention duration: the
+  // server enforces none, and promising one would be a lie.
+  if (draft.type === 'video' && draft.media.filter((item) => item.kind === 'video').length === 0) {
+    errors.media = 'Choose a video to post, or switch to a different type.';
+  }
+
   if (draft.type === 'project') {
     if (!draft.project.title.trim()) {
       errors.project = 'Give the project a title.';
@@ -250,6 +291,12 @@ export function parseTechnologies(value: string): string[] {
 export function mimeTypeFromName(fileName?: string | null): string {
   const extension = (fileName ?? '').split('.').pop()?.toLowerCase() ?? '';
   switch (extension) {
+    case 'mp4':
+    case 'm4v':
+      return 'video/mp4';
+    case 'mov':
+    case 'qt':
+      return 'video/quicktime';
     case 'jpg':
     case 'jpeg':
       return 'image/jpeg';
@@ -281,12 +328,19 @@ export function remainingMediaSlots(
   maxItems: number,
 ): number {
   if (type === 'image') return Math.max(0, maxItems - alreadyChosen);
+  // Exactly one, for a video or a cover or a certificate. Two videos in a
+  // carousel is a playlist, which this composer does not build.
   return alreadyChosen > 0 ? 0 : 1;
 }
 
-/** Whether this post type can carry an image at all. Video cannot, yet. */
+/** Whether this post type can carry media at all. A text post cannot. */
 export function acceptsMedia(type: ComposerType): boolean {
-  return type === 'image' || type === 'project' || type === 'achievement';
+  return (
+    type === 'image' ||
+    type === 'video' ||
+    type === 'project' ||
+    type === 'achievement'
+  );
 }
 
 /**
@@ -308,8 +362,14 @@ export function acceptsMedia(type: ComposerType): boolean {
  */
 export function mediaForType(type: ComposerType, media: readonly DraftMedia[]): DraftMedia[] {
   if (!acceptsMedia(type)) return [];
-  if (type === 'image') return [...media];
-  return media.slice(0, 1);
+
+  // A video post carries a video and nothing else. Handing `expo-image` a video
+  // renders a silent blank, so a mixed list is worse than an empty one.
+  if (type === 'video') return media.filter((item) => item.kind === 'video').slice(0, 1);
+  if (type === 'image') return media.filter((item) => item.kind === 'image');
+
+  // A project cover and a certificate are stills; a video is neither.
+  return media.filter((item) => item.kind === 'image').slice(0, 1);
 }
 
 /**
@@ -330,23 +390,56 @@ export function mediaForType(type: ComposerType, media: readonly DraftMedia[]): 
  *  - a **type outside the allow-list** is still refused, since the server would
  *    reject it too and the user deserves to know before spending their data.
  */
-export function validatePickedImage(
-  picked: { mimeType: string; sizeBytes: number; width: number; height: number },
+export function validatePickedMedia(
+  picked: {
+    kind: MediaKind;
+    mimeType: string;
+    sizeBytes: number;
+    /**
+     * Accepted so the caller can hand over the whole picked object, and
+     * **deliberately not consulted.** The picker documents these as "can be 0",
+     * and a dimension it did not report is not a reason to refuse a file —
+     * the server re-derives the real ones from the bytes anyway.
+     */
+    width?: number;
+    height?: number;
+  },
   limits: ComposerLimits = DEFAULT_LIMITS,
 ): string | null {
-  if (picked.mimeType && !limits.imageMimeTypes.includes(picked.mimeType)) {
-    const allowed = limits.imageMimeTypes
-      .map((type) => type.replace('image/', '').toUpperCase())
-      .join(', ');
-    return `That image type is not supported. Use ${allowed}.`;
+  const isVideo = picked.kind === 'video';
+  const allowedTypes = isVideo ? limits.videoMimeTypes : limits.imageMimeTypes;
+  const ceiling = isVideo ? limits.maxVideoBytes : limits.maxImageBytes;
+
+  if (picked.mimeType && !allowedTypes.includes(picked.mimeType)) {
+    const allowed = allowedTypes.map(shortMimeName).join(' or ');
+    return isVideo
+      ? `This video format isn't supported. Please choose an ${allowed} video.`
+      : `That image type is not supported. Use ${allowed}.`;
   }
 
   // Only a size we actually know can be compared with the ceiling.
-  if (picked.sizeBytes > limits.maxImageBytes) {
-    return `That image is larger than ${Math.floor(limits.maxImageBytes / (1024 * 1024))} MB.`;
+  if (picked.sizeBytes > ceiling) {
+    return isVideo
+      ? `This video is too large. Maximum allowed size: ${formatBytes(ceiling)}.`
+      : `That image is larger than ${Math.floor(ceiling / (1024 * 1024))} MB.`;
   }
 
   return null;
+}
+
+/**
+ * A MIME type as a person writes it: `video/mp4` becomes `MP4`, not `MP4` by
+ * accident of uppercasing something that was already spelled nicely.
+ */
+function shortMimeName(mimeType: string): string {
+  const name = mimeType.slice(mimeType.indexOf('/') + 1);
+  if (name === 'quicktime') return 'QuickTime';
+  return name.toUpperCase();
+}
+/** A byte count in the units a person actually reads. */
+function formatBytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -459,6 +552,11 @@ function toWireAchievement(achievement: DraftAchievement): WireAchievement {
  * no empty project object and an image post carries no achievement. The body is
  * trimmed, because the server counts what it stores, not what was typed.
  *
+ * **Every branch also sends `category`, because the server stores it verbatim**
+ * — `PostCreate.category` is required, and unlike `kind` it is not derived. A
+ * project files under `projects` and an achievement under `achievements`, which is
+ * what the feed's filter chips match on; text, image and video are `community`.
+ *
  * A project or achievement that also has a chosen image sends `media_ids` as
  * well — that image becomes the cover or the certificate on the card. The server
  * derives the post kind from the payload and keeps the gallery either way, so
@@ -474,15 +572,25 @@ export function buildCreateInput(
   const media = mediaIds.length > 0 ? { mediaIds } : {};
 
   if (draft.type === 'project') {
-    return { kind: 'project', body, project: toWireProject(draft.project), ...media };
+    return { kind: 'project', category: 'projects', body, project: toWireProject(draft.project), ...media };
   }
   if (draft.type === 'achievement') {
-    return { kind: 'achievement', body, achievement: toWireAchievement(draft.achievement), ...media };
+    return {
+      kind: 'achievement',
+      category: 'achievements',
+      body,
+      achievement: toWireAchievement(draft.achievement),
+      ...media,
+    };
   }
   if (draft.type === 'image') {
-    return { kind: 'image', body, mediaIds };
+    return { kind: 'image', category: 'community', body, mediaIds };
   }
-  return { kind: 'text', body };
+  if (draft.type === 'video') {
+    // The server derives the stored media kind from the asset itself, so the
+    // ids are all that has to travel; the post kind is what tells the feed
+    // which renderer to reach for.
+    return { kind: 'video', category: 'community', body, mediaIds };
+  }
+  return { kind: 'text', category: 'community', body };
 }
-
-
