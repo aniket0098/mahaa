@@ -1,10 +1,16 @@
-"""The ``/posts`` router — §9.1's six [M] routes.
+"""The ``/posts`` router — §9.1's six [M] routes, plus the four engagement verbs.
 
-**Only the [M] routes exist.** §9.1 marks likes, bookmarks, comments and report
-**[F]** — "No mobile caller" — and there is a documented reason for each: stage 2,
-a device-local like state, an honest empty `CommentsSheet`, and "no moderation
-queue exists". A router with routes the client never calls, returning counts the
-client never reads, would be surface the specification explicitly declined.
+**Engagement now exists: likes and comments are real, authenticated and
+persistent.** They were previously absent — §9.1 marked them **[F]** ("No mobile
+caller. `CommentsSheet` shows an honest empty state") and the like button toggled
+device-local state that a reload discarded. That is no longer true: the feed
+renders a filled heart driven by the server, and the comment sheet posts and lists
+real rows. So the four routes below have a caller and the tables behind them
+(`post_likes`, `post_comments`) exist.
+
+**Bookmarks and report remain absent, and for the unchanged reason.** Saving is
+still session-scoped device state with no server-side caller, and there is no
+moderation queue to file a report into.
 
 **Every route requires authentication, including the feed.** §9.1 marks all six
 [M], and `docs/feed-api-contract.md` says "`GET /posts` is [M]" — a member-visible
@@ -17,9 +23,9 @@ declaration order, so the parameterised route would otherwise capture "mine" and
 bind it to a UUID parser, producing a 422 that reads like a client bug. The same
 trap Phase 7 documents for `/users/me/photo` versus `/media/{media_id}`.
 
-**There is no ``GET /posts/{id}/comments``** even though a comment table is
-specified in §14.9, because §9.1 lists its routes as [F] and no table exists for
-comments in this phase.
+**The three-segment engagement paths cannot hit that trap.** `/posts/{id}/like`
+is a different shape from `/posts/{id}`, so no declaration order between them
+matters.
 """
 
 from __future__ import annotations
@@ -31,7 +37,14 @@ from fastapi import APIRouter, Depends, Path, Query, Response, status
 from app.api.deps import CurrentUser, DbSession
 from app.models.enums import PostCategory
 from app.schemas.common import Page, page_params
-from app.schemas.posts import PostCreate, PostUpdate, WirePost
+from app.schemas.posts import (
+    CommentCreate,
+    CommentRead,
+    PostCreate,
+    PostEngagementOut,
+    PostUpdate,
+    WirePost,
+)
 from app.services import posts as svc
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -133,4 +146,118 @@ def delete_post(db: DbSession, principal: CurrentUser, post_id: PostId) -> Respo
     the call and removes the card itself, so a body would be discarded.
     """
     svc.delete_post(db, principal, post_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --------------------------------------------------------------------------- #
+# Engagement                                                                    #
+# --------------------------------------------------------------------------- #
+#
+# **These four routes answer with `PostEngagementOut`, not `WirePost`.** A like
+# does not change a post's text, media or author, so re-serialising the whole post
+# would be a large response for a one-bit change — and the client's optimistic
+# update only needs the three numbers back. Sending the counts alone also removes
+# any chance of a stale full post overwriting a newer one in the cache.
+#
+# **`/posts/{id}/comments` is declared before `/posts/{id}` is a non-issue here**
+# because the two are different *paths*, not different literals for one. The
+# ordering trap this router already documents is `/posts/mine` versus
+# `/posts/{post_id}`, which are the same shape; these three-segment paths cannot
+# collide with a one-segment route.
+
+
+@router.post(
+    "/{post_id}/like",
+    response_model=PostEngagementOut,
+    summary="Like a post (idempotent)",
+)
+def like_post(
+    db: DbSession, principal: CurrentUser, post_id: PostId
+) -> PostEngagementOut:
+    """``POST /posts/{id}/like`` — record this account's like.
+
+    **200, never 201 or 409.** The route is idempotent: a double tap and a retried
+    request are the same event arriving twice, and both converge on the state the
+    first call already reached. 201 would claim a resource that may not be new, and
+    409 would make a correct client look broken. The returned counts are the
+    authoritative post-write values, so an optimistic client can adopt them
+    instead of guessing.
+    """
+    return svc.like_post(db, principal, post_id)
+
+
+@router.delete(
+    "/{post_id}/like",
+    response_model=PostEngagementOut,
+    summary="Remove this account's like (idempotent)",
+)
+def unlike_post(
+    db: DbSession, principal: CurrentUser, post_id: PostId
+) -> PostEngagementOut:
+    """``DELETE /posts/{id}/like`` — remove this account's like.
+
+    200 rather than 204 **because the counts change**, and a client that has
+    optimistically decremented a number needs the server's real one back to
+    reconcile against. A 204 would leave the card showing a guess.
+    """
+    return svc.unlike_post(db, principal, post_id)
+
+
+@router.get(
+    "/{post_id}/comments",
+    response_model=Page[CommentRead],
+    summary="A post's comments, newest first",
+)
+def list_comments(
+    db: DbSession,
+    principal: CurrentUser,
+    post_id: PostId,
+    params: tuple[int, int] = Depends(page_params),
+) -> Page[CommentRead]:
+    """``GET /posts/{id}/comments`` — the sheet's list, in the shared envelope.
+
+    Readable by any authenticated member, exactly like the post itself. Only a
+    missing or soft-deleted post 404s.
+    """
+    limit, offset = params
+    return svc.list_comments(db, principal, post_id, limit=limit, offset=offset)
+
+
+@router.post(
+    "/{post_id}/comments",
+    response_model=CommentRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Comment on a post",
+)
+def create_comment(
+    db: DbSession,
+    principal: CurrentUser,
+    post_id: PostId,
+    payload: CommentCreate,
+) -> CommentRead:
+    """``POST /posts/{id}/comments`` — 201 with the stored comment.
+
+    The author is the authenticated principal. `CommentCreate` has `extra="forbid"`
+    and carries no `author_id`, so a client that tries to post as somebody else is
+    rejected with a 422 naming the field rather than having it silently dropped.
+    """
+    return svc.create_comment(db, principal, post_id, payload)
+
+
+@router.delete(
+    "/{post_id}/comments/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete your own comment (soft delete)",
+)
+def delete_comment(
+    db: DbSession, principal: CurrentUser, post_id: PostId, comment_id: str
+) -> Response:
+    """``DELETE /posts/{id}/comments/{comment_id}` — author only.
+
+    **404 for another person's comment, not 403**: a 403 confirms the comment
+    exists, which would make this route an oracle for probing ids. 204 because
+    there is nothing left to say — the row becomes a tombstone and disappears from
+    every read.
+    """
+    svc.delete_comment(db, principal, post_id, comment_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -30,8 +30,12 @@ function makePost(overrides: Partial<FeedPost> = {}): FeedPost {
     achievement: null,
     tags: [],
     createdAt: '2026-03-01T00:00:00Z',
+    // The server is the only source of these; zero is the honest fixture default.
+    engagement: { likeCount: 0, commentCount: 0, likedByMe: false },
     author: {
       name: 'Ada Lovelace',
+      username: 'ada',
+      publicId: 'pub_ada',
       headline: null,
       avatarUrl: null,
       profileHref: '/profile',

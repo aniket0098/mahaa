@@ -296,13 +296,22 @@ describe('the avatar url bug (Phase 4I)', () => {
     // The raw `served_at` path was passed straight through, so a relative
     // `/api/v1/media/<id>` never resolved to a host and every author avatar
     // silently fell back to initials -- which reads as "no photo", not as a bug.
+    //
+    // The mapping now lives in the shared `mapAuthor`, which posts and comments
+    // both go through. Asserting the helper is what keeps a third surface from
+    // re-deriving the rule on its own.
     expect(posts).toContain(
-      'avatarUrl: wire.author.avatar_url ? absoluteMediaUri(wire.author.avatar_url) : null',
+      'avatarUrl: wire.avatar_url ? absoluteMediaUri(wire.avatar_url) : null',
     );
+    expect(posts).toMatch(/function mapAuthor\(/);
   });
 
   it('still leaves a genuinely absent avatar null', () => {
-    expect(posts).not.toContain('avatarUrl: absoluteMediaUri(wire.author.avatar_url)');
+    // The ternary is the point: an absent avatar must not become the string
+    // "null" resolved against the base URL, which would 404 instead of falling
+    // back to initials.
+    expect(posts).not.toContain('avatarUrl: absoluteMediaUri(wire.avatar_url)');
+    expect(posts).not.toContain('avatarUrl: absoluteMediaUri(wire.avatar.avatar_url)');
   });
 });
 
@@ -339,8 +348,23 @@ describe('playback is lazy and single (source-level)', () => {
   });
 
   it('guarantees only one video plays at a time', () => {
-    expect(videoComponent).toContain('function claimPlayback');
-    expect(videoComponent).toContain('activePlayer.pause()');
+    // The guarantee used to rest on a module-level `activePlayer` singleton in this
+    // file. It now rests on a coordinator that decides from *measured* visibility
+    // and picks exactly one winner — which is a stronger property, because the old
+    // singleton only knew about videos a reader had already tapped, while this one
+    // also governs the ones that autoplay.
+    expect(videoComponent).toContain('registerVideo(');
+    expect(videoComponent).toContain('subscribePlayback(');
+
+    const coordinator = read('../feed/feedPlayback.ts');
+    expect(coordinator).toContain('export function chooseActive(');
+    // The ordering is the whole guarantee: the outgoing slot is paused before the
+    // incoming one is started, so two players never overlap.
+    expect(coordinator.indexOf('targets.get(previousId)?.pause()')).toBeLessThan(
+      coordinator.indexOf('targets.get(nextId)?.play()'),
+    );
+    // And it can only ever name one winner.
+    expect(coordinator).toContain('let best: VideoSlot | null = null;');
   });
 
   it('starts muted, so nothing can make noise unasked', () => {
@@ -348,7 +372,9 @@ describe('playback is lazy and single (source-level)', () => {
   });
 
   it('routes a video to the player and never to the image viewer', () => {
-    expect(postMedia).toContain('<PostVideo uri={item.uri}');
+    // Multi-line now: the video also receives the id and position the playback
+    // coordinator needs. The routing rule itself is unchanged and still asserted.
+    expect(postMedia).toMatch(/<PostVideo[\s\S]*?uri=\{item\.uri\}/);
     expect(postMedia).toContain(
       'item.kind === "video" ? undefined : () => onOpen(index)',
     );

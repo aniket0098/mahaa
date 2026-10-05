@@ -116,12 +116,24 @@ describe('createDemoFeedPosts', () => {
     expect(new Set(posts.map((post) => post.author.name)).size).toBe(posts.length);
   });
 
-  it('carries no engagement count on any post', () => {
+  it('carries no engagement, because there is no server behind it', () => {
     for (const post of posts) {
+      // Zeros, not a fabricated figure. A demo post with "12 likes" would be
+      // indistinguishable on screen from a real one, which is exactly what the
+      // DEMO chip exists to prevent.
+      expect(post.engagement).toEqual({ likeCount: 0, commentCount: 0, likedByMe: false });
+
       const record = post as unknown as Record<string, unknown>;
-      for (const key of ['likes', 'comments', 'shares', 'bookmarks', 'counts']) {
-        expect(record[key], `${post.id} must not carry ${key}`).toBeUndefined();
+      for (const key of ['likes', 'comments', 'shares', 'bookmarks', 'counts', 'likeCount']) {
+        expect(record[key], `${post.id} must not carry a loose ${key}`).toBeUndefined();
       }
+    }
+  });
+
+  it('gives no author a handle, so no @name can be mistaken for a real account', () => {
+    for (const post of posts) {
+      expect(post.author.username, `${post.id} must not carry a handle`).toBeNull();
+      expect(post.author.publicId, `${post.id} must not carry a public id`).toBeNull();
     }
   });
 

@@ -19,6 +19,11 @@
  * The rules themselves (what is valid, what may be submitted, what the request
  * body looks like) live in `composerModel.ts` and are unit tested; this file is
  * the wiring.
+ *
+ * **One optional query param: `?type=`.** Home's create chips pass the type they
+ * were tapped, so tapping "Project" opens a project draft rather than making the
+ * user choose again. It is read once, as the draft's initial value, and validated
+ * against `COMPOSER_TYPES`; with no param the screen behaves exactly as before.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -32,7 +37,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
@@ -41,6 +46,7 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/auth/AuthContext';
 import { fetchProfile } from '@/api/profile';
 import { createPost } from '@/api/posts';
+import type { FeedPost } from '@/features/feed/feedModel';
 import { fetchMediaLimits, primeMediaAuth, uploadPickedMedia, type MediaKind } from '@/api/media';
 import { queryKeys } from '@/api/queryKeys';
 import { colors, spacing } from '@/theme/tokens';
@@ -61,6 +67,7 @@ import {
   buildCreateInput,
   canSubmit,
   acceptsMedia,
+  COMPOSER_TYPES,
   emptyDraft,
   initialSlots,
   isDirty,
@@ -113,10 +120,34 @@ export default function CandidateAddPostScreen() {
   const { principal } = useAuth();
   const userId = principal?.id ?? null;
 
+  /**
+   * The type Home asked for, if it asked for one.
+   *
+   * **Read once, as the draft's initial value, not as a live input.** An effect
+   * that re-applied it would overwrite a type the user changed by hand, because
+   * the param does not change while the screen stays mounted.
+   *
+   * `COMPOSER_TYPES` is the authority: a value that is not one of the composer's
+   * own types falls back to the default, so a hand-edited URL cannot reach a
+   * branch with no fields behind it.
+   */
+  const { type: typeParam } = useLocalSearchParams<{ type?: string | string[] }>();
+  const requestedType = useMemo<ComposerType>(() => {
+    const value = Array.isArray(typeParam) ? typeParam[0] : typeParam;
+    const match = COMPOSER_TYPES.find((option) => option.value === value);
+    return match?.value ?? emptyDraft().type;
+  }, [typeParam]);
+
   const profileQuery = useQuery({ queryKey: queryKeys.profile, queryFn: fetchProfile });
   const limitsQuery = useQuery({ queryKey: queryKeys.mediaLimits, queryFn: fetchMediaLimits });
 
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [draft, setDraft] = useState<Draft>(() => ({
+    ...emptyDraft(),
+    // The type the Home card was tapped for, when it passed one. Validated
+    // against `COMPOSER_TYPES` rather than trusted, so a hand-typed URL cannot
+    // put the draft into a type the composer does not have fields for.
+    type: requestedType,
+  }));
   const [slots, setSlots] = useState<UploadSlot[]>([]);
   const [restored, setRestored] = useState(false);
   const [phase, setPhase] = useState<Phase>('editing');
@@ -392,10 +423,24 @@ export default function CandidateAddPostScreen() {
     setPhase('submitting');
     try {
       // Only now, with every image confirmed by the server, is the post sent.
-      await createPost(buildCreateInput(draft, working, limits));
+      const created = await createPost(buildCreateInput(draft, working, limits));
       await clearDraft(userId);
-      // Refresh the one feed query Home renders from, so the new post appears
-      // without a restart and without a second competing feed.
+
+      // **The server's own copy, not a locally assembled one.** `createPost`
+      // returns the stored `WirePost` — the author's identity, the real
+      // engagement zeros, the resolved media — so inserting *that* cannot show a
+      // card that differs from what every other member will read. It is
+      // de-duplicated by id, so a refetch that has already included it is a
+      // no-op rather than a second copy at the top of the feed.
+      queryClient.setQueryData<FeedPost[]>(queryKeys.posts, (current) => {
+        if (!current) return [created];
+        return current.some((post) => post.id === created.id) ? current : [created, ...current];
+      });
+
+      // Then refresh the one feed query Home renders from, so the new post is
+      // reconciled against the authoritative list — including
+      // `['posts', 'mine']`, which this one prefix also covers — without a
+      // restart and without a second competing feed.
       await queryClient.invalidateQueries({ queryKey: queryKeys.posts });
       if (router.canGoBack()) {
         router.back();

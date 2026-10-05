@@ -1,11 +1,36 @@
-"""``posts`` and ``post_media`` — §14.9, the two tables the [M] routes need.
+"""``posts``, ``post_media``, ``post_likes`` and ``post_comments`` — §14.9's tables
+for the feed, of which four of the five exist.
 
-**Only two of §14.9's five tables exist here.** ``post_likes``,
-``post_bookmarks`` and ``post_comments`` are deliberately absent: §9.1 marks every
-route that reaches them **[F]** — "No mobile caller. `CommentsSheet` shows an
-honest empty state" — and creating tables for routes the client does not call
-would be inventing surface the specification explicitly deferred. Their keys and
-indexes are already fully specified in §14.9 when that phase is picked up.
+``post_likes`` and ``post_comments`` are the other two of §14.9's five tables.
+They exist because the client now has a real caller for them: the feed renders a
+like button and a comment sheet, and §9.1 marks both routes ``[M]`` once there is
+a mobile caller. They were absent while ``CommentsSheet`` was an honest empty
+state and the like button was device-local — and a control that cannot persist is
+not an engagement feature.
+
+``post_bookmarks`` is still absent, and still for the reason above: saving is
+session-scoped device state with no server-side caller.
+
+**``post_likes`` has a composite primary key of ``(post_id, user_id)`` and no
+surrogate id.** A duplicate like is therefore *unrepresentable* rather than
+merely discouraged: the second ``INSERT`` collides with the key. This is the same
+reasoning as ``connections``' ``LEAST``/``GREATEST`` index — an application-level
+"does this already exist?" check cannot survive two clients racing, so the
+constraint that decides the race has to live in the database. A surrogate ``id``
+would be worse than useless here: it would let a duplicate row exist and force
+every reader to deduplicate.
+
+**``post_comments`` is a real record with its own id**, because unlike a like it
+is a thing with a body, a timestamp and an author — it is referenced, moderated
+and deleted individually. Ordering is ``(created_at DESC, id DESC)`` for the same
+determinism reason the feed itself uses: timestamps collide at microsecond
+resolution, and a comment list without a total order can repeat or drop a row
+across pages.
+
+**``body IS NOT NULL`` is enforced by a CHECK, not only by the schema.** A
+whitespace-only comment is the one value that is accepted by a naive length
+check, renders as an empty bubble forever, and cannot be unsent. The service
+refuses it too; the constraint is the last line of that defence.
 
 **``kind`` is derived, never accepted.** §9.2: "kind is **derived server-side**
 from which payload is present, never accepted as a free string." The client sends
@@ -168,3 +193,102 @@ class PostMedia(Base):
     asset: Mapped["MediaAsset"] = relationship(  # noqa: F821
         foreign_keys=[media_id], lazy="joined"
     )
+
+
+class PostLike(Base):
+    """One account's like on one post.
+
+    **The primary key is ``(post_id, user_id)`` and that is the whole design.**
+    A like is a pure relationship with no attributes worth storing, so giving it a
+    surrogate id would buy nothing and cost a unique constraint on top of it. As a
+    composite key the "no duplicate like" rule is the table's very shape: the
+    second ``INSERT`` from a double-tapped button collides with the key instead of
+    creating a second row, and two clients racing cannot both win.
+
+    It deliberately does **not** inherit :class:`UUIDPrimaryKeyMixin` for the same
+    reason ``PostMedia`` does not — that mixin would contribute an ``id`` column
+    and produce ``PRIMARY KEY (id, post_id, user_id)``, a three-column key the
+    specification never described.
+
+    ``post_id`` is CASCADE: a like is meaningless once its post is gone, and the
+    post is soft-deleted so the row only disappears with the post itself.
+    ``user_id`` is CASCADE for the reason every other user's row is — an account's
+    engagement is its own, and deleting the account should take it with it rather
+    than leave orphan rows nothing can join against.
+    """
+
+    __tablename__ = "post_likes"
+    __table_args__ = (
+        # `GET /posts/{id}` reports a like count for one post; this is that read.
+        Index("ix_post_likes_post_id", "post_id"),
+        # "which of these posts did I like", which is how the feed paints filled
+        # hearts on exactly the caller's own likes. Covered by the PK's leading
+        # `post_id`? No — this filters on `user_id`, which the PK does not lead
+        # with, so it needs its own index.
+        Index("ix_post_likes_user_id", "user_id"),
+        {"comment": "One row per (post, account); duplicates are unrepresentable."},
+    )
+
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class PostComment(UUIDPrimaryKeyMixin, Base):
+    """One comment on one post.
+
+    **It has a real surrogate id, unlike :class:`PostLike`.** A comment is a thing
+    with a body, an author and a timestamp — it is addressed individually by the
+    delete route and shown individually in the sheet — so it needs an identity of
+    its own. That is the whole difference between this table and ``post_likes``.
+
+    **No ``updated_at``.** A comment is edited by deleting and re-posting, which is
+    what makes moderation tractable; there is no edit verb and therefore no column
+    that could imply one exists.
+
+    ``deleted_at`` exists because §9.3 promises that "a published post's position
+    and **its comments** survive" — which only holds if deleting the post leaves
+    its comments readable. Comments are filtered out of listings by the service
+    rather than by the index, because the sheet is never long enough for the
+    partial index to pay for itself.
+    """
+
+    __tablename__ = "post_comments"
+    __table_args__ = (
+        # A blank comment is the one value a length check waves through, and it
+        # renders as an empty bubble forever. See the module docstring.
+        CheckConstraint("btrim(body) <> ''", name="body_not_blank"),
+        # The sheet's ordering, `(created_at DESC, id DESC)`.
+        Index(
+            "ix_post_comments_post_id_created_at_id",
+            "post_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
+    )
+
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), nullable=False
+    )
+    #: The person who wrote it. Named ``author_id`` rather than ``user_id`` because
+    #: it is read constantly alongside ``posts.author_id`` and confusing the two is
+    #: how a comment ends up attributed to the post's writer.
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    post: Mapped[Post] = relationship(foreign_keys=[post_id])
+    author: Mapped["User"] = relationship(foreign_keys=[author_id], lazy="joined")

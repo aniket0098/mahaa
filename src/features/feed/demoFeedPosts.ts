@@ -1,5 +1,5 @@
 /**
- * DEMO feed posts — development-only sample content for the Community Feed.
+ * DEMO feed posts â€” development-only sample content for the Community Feed.
  *
  * A direct port of the contract `features/stories/demoStories.ts` already
  * proves, with the same four guarantees:
@@ -22,7 +22,7 @@
  * Node (`demoFeedPosts.test.ts`).
  */
 
-import type { FeedPost } from './feedModel';
+import { NO_ENGAGEMENT, type FeedPost } from './feedModel';
 import { DEMO_FEED_IMAGES } from './demoFeedAssets';
 
 /** Namespace that makes a demo id impossible to confuse with a backend uuid. */
@@ -33,7 +33,7 @@ export const DEMO_POST_BADGE = 'DEMO';
 
 /** Shown under a demo post's external links, whose targets do not exist. */
 export const DEMO_EXTERNAL_LINK_NOTE =
-  'Demo link — illustrative address, no such page exists.';
+  'Demo link â€” illustrative address, no such page exists.';
 
 /** Why an author is not a real person, shown in place of a real headline. */
 const DEMO_HEADLINE_SUFFIX = 'Demo profile';
@@ -93,12 +93,17 @@ function isoBefore(nowIso: string, days: number, hours = 0): string {
 function demoAuthor(name: string, headline: string) {
   return {
     name,
-    headline: `${DEMO_HEADLINE_SUFFIX} · ${headline}`,
+    // Deliberately null rather than a made-up handle. A demo post that carried a
+    // real-looking `@name` could be mistaken for a real account, and the ids
+    // namespace alone does not protect the text a reader sees.
+    username: null,
+    publicId: null,
+    headline: `${DEMO_HEADLINE_SUFFIX} Â· ${headline}`,
     // No avatar URL: an initials bubble is honest, a stock face is not.
     avatarUrl: null,
     // There is no other-user profile screen, so a demo name is not tappable.
     profileHref: null,
-    // No verification service exists, so nothing can be verified — ever.
+    // No verification service exists, so nothing can be verified â€” ever.
     verified: false,
   };
 }
@@ -107,8 +112,8 @@ function demoAuthor(name: string, headline: string) {
  * The four demo posts, built fresh so their relative times read as recent
  * whenever the app is opened rather than as the day this file was written.
  *
- * The set deliberately covers all four card types — project, achievement,
- * image, text — so every renderer, the multi-image count, the See-more control,
+ * The set deliberately covers all four card types â€” project, achievement,
+ * image, text â€” so every renderer, the multi-image count, the See-more control,
  * and the full-screen viewer are all reviewable in development.
  */
 export function createDemoFeedPosts(nowIso: string): DemoPost[] {
@@ -126,7 +131,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       origin: 'demo',
       demo: true,
       title: 'Campus Event Platform',
-      body: 'A booking and check-in platform for college fests. Students reserve seats, organisers approve them, and the door team scans a QR code at the gate — replacing the spreadsheet we used last year.',
+      body: 'A booking and check-in platform for college fests. Students reserve seats, organisers approve them, and the door team scans a QR code at the gate â€” replacing the spreadsheet we used last year.',
       media: [
         {
           id: 'demo-media-campus-event-platform',
@@ -143,7 +148,7 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
         technologies: ['React', 'FastAPI', 'PostgreSQL', 'Docker'],
         category: 'Web Development',
         status: 'Academic project',
-        team: 'Team project · 4 students',
+        team: 'Team project Â· 4 students',
         role: 'Backend and database',
         sourceUrl: 'https://github.com/example-org/campus-event-platform',
         liveUrl: null,
@@ -152,6 +157,8 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       tags: ['WebDevelopment', 'CampusTech', 'FinalYearProject'],
       createdAt: isoBefore(nowIso, 1, 3),
       author: demoAuthor('Rohan Deshmukh', 'B.Tech CSE, final year'),
+      // Demo content has no server behind it, so a number here would be invented.
+      engagement: NO_ENGAGEMENT,
     },
 
     {
@@ -186,6 +193,8 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       tags: ['WebDevelopment', 'Certification'],
       createdAt: isoBefore(nowIso, 2, 5),
       author: demoAuthor('Priya Sharma', 'B.Sc IT, 3rd year'),
+      // Demo content has no server behind it, so a number here would be invented.
+      engagement: NO_ENGAGEMENT,
     },
 
     {
@@ -227,6 +236,8 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       tags: ['Workshop', 'Accessibility', 'CampusLife'],
       createdAt: isoBefore(nowIso, 4, 2),
       author: demoAuthor('Aarav Iyer', 'Computer Engineering, 2nd year'),
+      // Demo content has no server behind it, so a number here would be invented.
+      engagement: NO_ENGAGEMENT,
     },
 
     {
@@ -243,6 +254,8 @@ export function createDemoFeedPosts(nowIso: string): DemoPost[] {
       tags: ['OpenSource', 'Algorithms', 'TeamUp'],
       createdAt: isoBefore(nowIso, 6, 7),
       author: demoAuthor('Neha Kulkarni', 'MCA, 1st year'),
+      // Demo content has no server behind it, so a number here would be invented.
+      engagement: NO_ENGAGEMENT,
     },
   ];
 

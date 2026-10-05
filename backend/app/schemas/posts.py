@@ -27,6 +27,9 @@ MAX_BODY_CHARS = 5000
 MAX_TITLE_CHARS = 200
 MAX_TAGS = 20
 MAX_MEDIA_ITEMS = 10
+#: A comment is a paragraph, not an essay. Generous enough for a paragraph plus a
+#: link, short enough that one request cannot carry a wall of text.
+MAX_COMMENT_CHARS = 2000
 
 
 class ProjectPayload(BaseModel):
@@ -173,6 +176,77 @@ class PostMediaOut(BaseModel):
     position: int
 
 
+class PostEngagementOut(BaseModel):
+    """``engagement`` — the three numbers and one flag a feed card renders.
+
+    **Counted per viewer, not globally, and that is why it is a nested object
+    rather than two loose integers.** ``liked_by_me`` is meaningless without
+    ``like_count`` beside it: a card needs to know both how many people liked and
+    whether *this* reader is one of them. Splitting them across the response would
+    let a client render a filled heart next to somebody else's count.
+
+    **The counts are real ``COUNT`` s taken at read time**, never a denormalised
+    column incremented by the writer. A counter column is one more thing that can
+    drift, and a feed whose like count disagrees with the like table is worse than
+    a feed with no count at all.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    #: Rows in ``post_likes`` for this post. Never negative.
+    like_count: int
+    #: Live rows in ``post_comments`` for this post. Tombstoned ones are excluded.
+    comment_count: int
+    #: Whether *this* viewer has a ``post_likes`` row here.
+    liked_by_me: bool
+
+
+class CommentCreate(BaseModel):
+    """``POST /posts/{id}/comments`` body — exactly ``{body}``.
+
+    **There is no ``author_id`` field, and ``extra="forbid"`` is what makes that
+    load-bearing.** A client that tries to post a comment as somebody else gets a
+    422 naming the unexpected field rather than a silently ignored key. This is
+    the same rule as ``PostCreate``: the strongest way to forbid impersonation is
+    to refuse to parse the field at all.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=MAX_COMMENT_CHARS)
+
+    @field_validator("body")
+    @classmethod
+    def _body_is_not_blank(cls, value: str) -> str:
+        """Refuse whitespace-only text.
+
+        A length check accepts ``"   "``, which renders as an empty comment bubble
+        that the author can never edit or unsend. The database CHECK is the last
+        line of defence for the same rule; this is the one that names the field.
+        """
+        if not value.strip():
+            raise ValueError("A comment cannot be empty.")
+        return value
+
+
+class CommentRead(BaseModel):
+    """One comment, as the sheet renders it.
+
+    ``author`` is the **existing** :class:`PostAuthorOut`, not a new shape. A
+    comment needs a name, a handle and an avatar — exactly what a post's author
+    block needs — so reusing the model means one identity projection in the
+    codebase instead of two that could disagree about what a person is called.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    post_id: uuid.UUID
+    body: str
+    created_at: datetime
+    author: PostAuthorOut
+
+
 class PostAuthorOut(BaseModel):
     """``author`` — §9.2's identity fields, plus the two handles §20 needs.
 
@@ -229,6 +303,10 @@ class WirePost(BaseModel):
     created_at: datetime
     updated_at: datetime
     author: PostAuthorOut
+    #: Always present, and always real. A card that wants to render "12 likes"
+    #: reads this and nothing else; there is no other engagement source to fall
+    #: back to, which is what stops the client inventing a number.
+    engagement: PostEngagementOut
 
 
 #: ``/posts`` answers with ``Page[WirePost]`` — ``{items, total, limit, offset,

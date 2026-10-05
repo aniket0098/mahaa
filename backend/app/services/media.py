@@ -1,4 +1,4 @@
-"""Media: limits, validation, storage, and owner-scoped retrieval — §11.
+"""Media: limits, validation, storage, and reference-scoped retrieval — §11.
 
 **One authority for the limits.** `GET /media` publishes them so "a limit change
 must not require a client release" (§11.4), which only works if there is exactly
@@ -6,6 +6,16 @@ one copy. Every number below is defined once, in this module, and the same
 constants drive both the published document and the enforcement path — a test
 asserts they are the same objects, because two lists that agree today drift by
 Phase 8.
+
+**Reading is scoped by reference, not by ownership alone.** Phase 12 widened
+`serve`: §11.5's original "bytes only to the uploader" made the feed unreadable,
+because `GET /posts` is a member-visible read while every picture inside another
+person's post answered 404. The rule now is that an asset is readable by any
+authenticated member once a *visible* row references it — a live post, an active
+story, or somebody's avatar — and by nobody else. An unreferenced upload and any
+`document` stay owner-only, so this is not a public bucket. See
+:func:`_is_member_readable` for the full argument and the §16 non-disclosure
+rule that keeps "not yours" and "does not exist" the same 404.
 
 **The client's ``Content-Type`` is a claim, not evidence.** §11.3: the server
 "must not trust them — re-derive dimensions from the bytes where feasible, and
@@ -567,43 +577,111 @@ def find_owned(session: Session, viewer: User, raw_id: str) -> MediaAsset:
     return row
 
 
+def _is_member_readable(session: Session, media_id: uuid.UUID, kind: MediaKind) -> bool:
+    """Whether any member may read this asset, rather than only its uploader.
+
+    **Why this exists.** §11.5's original rule — "bytes only to the uploader" —
+    was written before the feed had more than one reader, and it makes the product
+    impossible: ``GET /posts`` is readable by any authenticated member, so a post
+    authored by somebody else was visible while every image and video in it
+    answered 404. The author's avatar had the same problem, so a reader saw
+    initial letters where another person's face should be. A post whose picture
+    only its author can see is not a working social feed.
+
+    **The rule is reference-based, not role-based.** An asset is member-readable
+    exactly when a *visible* row already points at it:
+
+    * a **live** post (``deleted_at IS NULL``) — the same predicate the feed
+      applies, so a soft-deleted post's image stops being readable at the moment
+      the post leaves every read;
+    * an **active** story (§10.2's two conditions: unexpired and published); or
+    * somebody's current **avatar** (``users.avatar_media_id``), which is what
+      makes another person's face render in a card header.
+
+    An asset nothing visible references — an upload still sitting in the
+    composer, a replacement staged for later — stays owner-only, so the widened
+    rule does not turn the media table into a public bucket of loose files.
+
+    **Documents are never member-readable.** A PDF is a private resume or
+    certificate (§11.5: "private, owner-only"), and unlike a post photo it has no
+    public row pointing at it by design. That is why ``kind`` is a parameter and
+    the check returns ``False`` for a document before consulting any reference.
+    """
+    if kind is MediaKind.DOCUMENT:
+        return False
+
+    # A user avatar. Imported here, as every other cross-model import in this
+    # module is, to keep the import graph acyclic at module scope.
+    from app.models.user import User
+
+    if session.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(User.avatar_media_id == media_id)
+    ):
+        return True
+
+    if _live_post_references(session, media_id):
+        return True
+
+    return bool(_live_story_references(session, media_id))
+
+
 def serve(session: Session, viewer: User, raw_id: str) -> tuple[MediaAsset, bytes]:
-    """``GET /media/{id}`` — the bytes, for the uploader only.
+    """``GET /media/{id}`` — the bytes, for the uploader *or any member* when a
+    visible row already publishes the asset.
 
     Only the columns needed are selected. A list or metadata endpoint that
     selected ``*`` would drag every uploaded byte through the driver, which is
     the one performance trap this table's design creates.
+
+    **Authorisation is decided before the bytes are selected**, in one predicate
+    over the row's owner and its references, so an asset this caller may not read
+    is never loaded at all. The answer for "not yours" is still the same 404 as
+    for "does not exist": a distinct code would turn this route into an existence
+    oracle (§16), and the two cases must stay indistinguishable.
+
+    A **document** never reaches the reference check — see
+    :func:`_is_member_readable` — so a private resume stays private even once
+    its owner has attached it to nothing and a stranger guesses its id.
     """
 
     asset_id = parse_id(raw_id, "media")
+    # The owner's asset, or a published reference to it. Selecting `owner_id`
+    # here (rather than assuming `viewer.id`) is what lets the response carry the
+    # real owner for a member-readable asset.
     found = session.execute(
         select(
             MediaAsset.id,
             MediaAsset.kind,
             MediaAsset.mime_type,
             MediaAsset.size_bytes,
+            MediaAsset.owner_id,
             MediaAsset.data,
-        ).where(
-            MediaAsset.id == asset_id,
-            MediaAsset.owner_id == viewer.id,
-        )
+        ).where(MediaAsset.id == asset_id)
     ).one_or_none()
     if found is None:
         raise _not_found()
 
-    asset_id, kind, mime_type, size_bytes, data = found
+    asset_id, kind, mime_type, size_bytes, owner_id, data = found
     if data is None:
         # Reachable only if a future `storage_kind` keeps content elsewhere while
         # the V1 `database` reader is still in use. Answering 404 keeps "I cannot
         # serve this" in the same shape as "not yours" rather than leaking a 500.
         raise _not_found()
+
+    if owner_id != viewer.id and not _is_member_readable(session, asset_id, kind):
+        # Same answer as a missing asset, and raised before the bytes are read
+        # out, so an unauthorised call costs an index lookup.
+        raise _not_found()
+
     return (
         MediaAsset(
             id=asset_id,
             kind=kind,
             mime_type=mime_type,
             size_bytes=size_bytes,
-            owner_id=viewer.id,
+            owner_id=owner_id,
             storage_key=str(asset_id),
             served_at=served_path(asset_id),
         ),

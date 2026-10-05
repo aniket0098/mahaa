@@ -40,7 +40,16 @@ export type RealtimeEventType =
   | 'conversation.read'
   // Phase 3 — notifications. Payload mirrors the backend's `NotificationRead`,
   // so one object renders from either REST or the socket.
-  | 'notification.created';
+  | 'notification.created'
+  // Phase 12 — content. **Notifications that something committed**, never
+  // carriers of it: the payload is an id, an author id and a timestamp, and the
+  // client answers each one by re-fetching the authoritative row over REST. That
+  // is what keeps PostgreSQL the source of truth and this socket an
+  // optimisation — see `queryBridge.applyRealtimeEvent`.
+  | 'post.created'
+  | 'post.updated'
+  | 'post.deleted'
+  | 'story.created';
 
 export interface RealtimeEvent {
   event_id: string;
@@ -72,6 +81,10 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<RealtimeEventType>([
   'message.created',
   'conversation.read',
   'notification.created',
+  'post.created',
+  'post.updated',
+  'post.deleted',
+  'story.created',
 ]);
 
 /** Rebuild `/api/v1` into `wss://host/api/v1/ws`. */

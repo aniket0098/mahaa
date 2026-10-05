@@ -58,16 +58,36 @@ export const styles = StyleSheet.create({
    * story bubbles so every item in the row shares one baseline.
    */
   createContainer: { alignItems: 'center', width: STORY_ITEM_WIDTH },
+  /**
+   * The `Your story` circle: the caller's own avatar, ringed like a story bubble
+   * so the row scans as one rhythm, with the surface colour behind it rather
+   * than the primary fill. Phase 12 changed this from a solid blue plus — from a
+   * row of other people's faces, "add an opportunity" was never what it meant.
+   */
   createCircle: {
     alignItems: 'center',
-    backgroundColor: colors.colorPrimary,
-    borderColor: colors.colorBgSurface,
+    backgroundColor: colors.colorBgSurface,
+    borderColor: colors.colorPrimary,
     borderRadius: STORY_CIRCLE / 2,
     borderWidth: 2,
     height: STORY_CIRCLE,
     justifyContent: 'center',
     width: STORY_CIRCLE,
     ...elevation.sm,
+  },
+  /** The "+" badge, bottom-right of the circle: says "add" without hiding the face. */
+  createBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.colorPrimary,
+    borderColor: colors.colorBgSurface,
+    borderRadius: 11,
+    borderWidth: 2,
+    bottom: -2,
+    height: 22,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: -2,
+    width: 22,
   },
   createLabel: {
     color: colors.colorTextPrimary,

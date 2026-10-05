@@ -15,7 +15,13 @@
 
 import { apiClient } from '@/api/client';
 import { absoluteMediaUri } from '@/api/media';
-import type { FeedCategory, FeedPost, FeedPostKind } from '@/features/feed/feedModel';
+import type {
+  FeedAuthor,
+  FeedCategory,
+  FeedComment,
+  FeedPost,
+  FeedPostKind,
+} from '@/features/feed/feedModel';
 
 /* -------------------------------------------------------------------------- */
 /* Wire shapes — the server's field names, mapped once, here.                   */
@@ -56,10 +62,45 @@ export interface WireAchievement {
 
 interface WireAuthor {
   readonly name: string;
+  /** The searchable handle. Read so the card can render an `@username` line. */
+  readonly username: string;
+  /** The immutable, shareable handle. Carried so a card can name its author. */
+  readonly public_id: string;
   readonly headline: string | null;
   readonly avatar_url: string | null;
   readonly verified: boolean;
   readonly is_self: boolean;
+}
+
+/**
+ * `engagement` — the server's own counts, mapped once, here.
+ *
+ * **These are the only numbers the card may print.** The fields are required, not
+ * optional-with-a-default, so a card cannot reach for a fallback when the field is
+ * missing: `mapPost` reads a server response that either carries the block or the
+ * type is wrong. That is what stops the feed from ever showing a fabricated "12
+ * likes", which is the single most misleading thing this module could do.
+ */
+interface WireEngagement {
+  readonly like_count: number;
+  readonly comment_count: number;
+  readonly liked_by_me: boolean;
+}
+
+/** One comment, as `GET/POST /posts/{id}/comments` return it. */
+export interface WireComment {
+  readonly id: string;
+  readonly post_id: string;
+  readonly body: string;
+  readonly created_at: string;
+  readonly author: WireAuthor;
+}
+
+/** What `POST`/`DELETE /posts/{id}/like` answer with. */
+export interface WireEngagementOut {
+  readonly like_count: number;
+  readonly comment_count: number;
+  readonly liked_by_me: boolean;
 }
 
 interface WirePost {
@@ -75,6 +116,7 @@ interface WirePost {
   readonly created_at: string;
   readonly updated_at: string;
   readonly author: WireAuthor;
+  readonly engagement: WireEngagement;
 }
 
 /**
@@ -94,7 +136,13 @@ interface PostPage {
   readonly has_more: boolean;
 }
 
-/** What the composer sends. `kind` is re-derived server-side, never trusted. */
+/** The comments envelope, which is the same `Page` shape the posts list uses. */
+interface CommentPage {
+  readonly items: readonly WireComment[];
+  readonly total: number;
+}
+
+/** `POST /posts` body, mapped onto the server's `PostCreate`. */
 export interface CreatePostInput {
   readonly kind: FeedPostKind;
   /**
@@ -170,20 +218,100 @@ function mapPost(wire: WirePost): FeedPost {
       : null,
     tags: [...wire.tags],
     createdAt: wire.created_at,
-    author: {
-      name: wire.author.name,
-      headline: wire.author.headline,
-      // **The same treatment media uris get, and for the same reason.** This
-      // used to pass the raw `served_at` path straight through, so a relative
-      // `/api/v1/media/<id>` never resolved to a host and every author avatar
-      // silently fell back to initials — a bug that looks like "this person has
-      // no photo" rather than like a broken URL.
-      avatarUrl: wire.author.avatar_url ? absoluteMediaUri(wire.author.avatar_url) : null,
-      // A post of the caller's own opens the profile route; another author's does
-      // not, because the app has no other-user profile screen.
-      profileHref: wire.author.is_self ? '/profile' : null,
-      verified: wire.author.verified,
+    engagement: {
+      likeCount: wire.engagement.like_count,
+      commentCount: wire.engagement.comment_count,
+      likedByMe: wire.engagement.liked_by_me,
     },
+    author: mapAuthor(wire.author),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Engagement — likes and comments                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `POST /posts/{id}/like` and `DELETE /posts/{id}/like`.
+ *
+ * **Both resolve to the server's authoritative counts**, which is what lets the
+ * card reconcile an optimistic update rather than keep a guess. Both are
+ * idempotent server-side, so a double tap is not an error and needs no
+ * client-side de-duplication beyond disabling the button while one is in flight.
+ */
+export function likePost(postId: string): Promise<WireEngagementOut> {
+  return apiClient.post<WireEngagementOut>(`/posts/${postId}/like`);
+}
+
+export function unlikePost(postId: string): Promise<WireEngagementOut> {
+  return apiClient.delete<WireEngagementOut>(`/posts/${postId}/like`);
+}
+
+/**
+ * `GET /posts/{id}/comments` — the sheet's list.
+ *
+ * Read through the API rather than from the post's own payload: a post carries a
+ * *count*, not the comments themselves, so a sheet that invented its own list
+ * would be showing something the server never said.
+ */
+export async function fetchComments(postId: string): Promise<FeedComment[]> {
+  const page = await apiClient.get<CommentPage>(`/posts/${postId}/comments`);
+  return page.items.map(mapComment);
+}
+
+/**
+ * `POST /posts/{id}/comments` — the author's own words.
+ *
+ * Only `{body}` is sent. There is no author field on the wire, because there is
+ * none on the server: the comment is attributed to the bearer token, so a client
+ * cannot post as somebody else even if it tried.
+ */
+export async function createComment(
+  postId: string,
+  body: string,
+): Promise<FeedComment> {
+  return mapComment(await apiClient.post<WireComment>(`/posts/${postId}/comments`, { body: { body } }));
+}
+
+/** `DELETE /posts/{id}/comments/{commentId}` — the author's own comment only. */
+export async function deleteComment(
+  postId: string,
+  commentId: string,
+): Promise<void> {
+  await apiClient.delete<void>(`/posts/${postId}/comments/${commentId}`);
+}
+
+/**
+ * One author projection, shared by a post and by a comment.
+ *
+ * **Both render an avatar and a name, so both read the same identity.** One
+ * mapper means a person's avatar can never be resolved one way on a post and
+ * another way on their comment.
+ */
+function mapAuthor(wire: WireAuthor): FeedAuthor {
+  return {
+    name: wire.name,
+    username: wire.username,
+    publicId: wire.public_id,
+    headline: wire.headline,
+    // The same absolutisation a post's author avatar gets, and for the same
+    // reason: the API serves media as a relative `served_at` path, and a path
+    // that never resolves to a host silently falls back to initials.
+    avatarUrl: wire.avatar_url ? absoluteMediaUri(wire.avatar_url) : null,
+    // A comment the reader wrote opens their own profile, exactly as a post of
+    // their own does. The server decides which those are via `is_self`.
+    profileHref: wire.is_self ? '/profile' : null,
+    verified: wire.verified,
+  };
+}
+
+function mapComment(wire: WireComment): FeedComment {
+  return {
+    id: wire.id,
+    postId: wire.post_id,
+    body: wire.body,
+    createdAt: wire.created_at,
+    author: mapAuthor(wire.author),
   };
 }
 

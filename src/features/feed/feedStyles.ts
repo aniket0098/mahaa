@@ -164,6 +164,11 @@ export const styles = StyleSheet.create({
   },
   actionActive: { backgroundColor: colors.colorPrimarySubtle },
   actionLabel: { color: colors.colorTextSecondary },
+  /** A busy Like button dims rather than disappearing, so the row does not reflow. */
+  actionDisabled: { opacity: 0.6 },
+  actionPressed: { opacity: 0.7 },
+  /** The count beside an icon. Toned down so the icon stays the primary signal. */
+  actionCount: { color: colors.colorTextTertiary },
   /** Local-only state must be visible, not implied (see localEngagement.ts). */
   localNote: { color: colors.colorTextTertiary },
 
@@ -230,6 +235,39 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sheetBody: { gap: spacing.md },
+  /** Lets the list shrink under the keyboard instead of being pushed off-screen. */
+  sheetKeyboard: { flexShrink: 1 },
+
+  /* ------------------------------ comment rows -------------------------------- */
+  commentRow: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
+  commentBody: { flex: 1, gap: 2 },
+  commentMeta: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
+  /** An optimistic row is dimmed because it is not on the server yet. */
+  commentPendingText: { color: colors.colorTextTertiary },
+  commentComposerRow: { alignItems: 'center', justifyContent: 'center', minHeight: 72 },
+
+  /** The composer: a 48px field and a 44px send target, per the touch rules. */
+  commentComposer: { alignItems: 'flex-end', flexDirection: 'row', gap: spacing.sm },
+  commentInput: {
+    borderColor: colors.colorBorder,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    color: colors.colorTextPrimary,
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  commentSend: {
+    alignItems: 'center',
+    backgroundColor: colors.colorPrimary,
+    borderRadius: radius.full,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  /** Dimmed rather than hidden, so the row never reflows under the reader's thumb. */
+  commentSendDisabled: { opacity: 0.4 },
   sheetEmpty: {
     alignItems: 'flex-start',
     backgroundColor: colors.colorBgMuted,
@@ -251,7 +289,15 @@ export const styles = StyleSheet.create({
   },
   sheetComposerNote: { color: colors.colorTextTertiary },
 
-  /* --------------------------- post overflow menu ---------------------------- */
+  /* ------------------------------ engagement summary --------------------------- */
+  /** Counts sit above the action row, left-aligned like the rest of the card. */
+  summaryRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
+  summaryText: { color: colors.colorTextSecondary },
+  summaryLink: { justifyContent: 'center', minHeight: 32 },
+  summaryLinkText: { color: colors.colorTextSecondary },
+  summaryEmpty: { color: colors.colorTextTertiary },
+
+  /* ----------------------------- post overflow menu ---------------------------- */
   /** A centred dialog rather than a bottom sheet — it is a short action list. */
   dialogCard: {
     backgroundColor: colors.colorBgSurface,

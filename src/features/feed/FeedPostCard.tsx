@@ -23,7 +23,7 @@
  */
 
 import { useState, useSyncExternalStore } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { Badge } from '@/components/ui/Badge';
@@ -31,6 +31,7 @@ import { Card } from '@/components/ui/Card';
 import { StatusBanner } from '@/components/ui/StatusBanner';
 import { AchievementBlock } from '@/features/feed/AchievementBlock';
 import { CommentsSheet } from '@/features/feed/CommentsSheet';
+import { EngagementSummary } from '@/features/feed/EngagementSummary';
 import { MediaViewer } from '@/features/feed/MediaViewer';
 import { PostActionBar } from '@/features/feed/PostActionBar';
 import { PostHeader } from '@/features/feed/PostHeader';
@@ -48,13 +49,12 @@ import {
   LOCAL_ENGAGEMENT_NOTE,
   getLocalEngagementVersion,
   hidePost,
-  isLiked,
   isSaved,
   subscribeLocalEngagement,
-  toggleLike,
   toggleSave,
 } from '@/features/feed/localEngagement';
 import { sharePost } from '@/features/feed/sharePost';
+import { usePostEngagement } from '@/features/feed/usePostEngagement';
 
 export interface FeedPostCardProps {
   post: FeedPost;
@@ -65,8 +65,9 @@ export interface FeedPostCardProps {
 }
 
 export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardProps) {
-  // One subscription per card. A like on this post changes the module store, and
-  // this is what re-renders the card against the new value.
+  // One subscription per card. A save or a hide changes the module store, and
+  // this is what re-renders the card against the new value. (Likes are server
+  // state now and arrive through React Query instead.)
   useSyncExternalStore(
     subscribeLocalEngagement,
     getLocalEngagementVersion,
@@ -78,15 +79,18 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  // This card's own offset within the scroll content. The feed reports its
+  // scroll offset; the difference of the two is what tells the playback
+  // coordinator whether a video here is on screen.
+  const [top, setTop] = useState(0);
 
-  const liked = isLiked(post.id);
+  const engagement = usePostEngagement(post);
+
   const saved = isSaved(post.id);
   const badge = feedKindLabel(post.kind);
   const body = post.body?.trim() ?? '';
   const isLong = body.length > BODY_PREVIEW_CHARS;
   const canOpenProfile = Boolean(post.author.profileHref);
-  // Only rendered when at least one is on, so exactly one branch always applies.
-  const engagementNote = liked && saved ? 'Liked and saved' : liked ? 'Liked' : 'Saved';
 
   const handleShare = () => {
     setShareError(null);
@@ -96,7 +100,16 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
   };
 
   return (
-    <Card padded={false} style={styles.card} testID={`feed-post-${post.id}`}>
+    <Card
+      padded={false}
+      style={styles.card}
+      testID={`feed-post-${post.id}`}
+      onLayout={({ nativeEvent }: LayoutChangeEvent) => {
+        // Only a card holding a video needs to publish a position; the rest would
+        // re-render on every layout pass for no reader-visible reason.
+        if (!post.media.some((item) => item.kind === 'video')) return;
+        setTop(nativeEvent.layout.y);
+      }}>
       <View style={styles.cardBody}>
         <PostHeader
           post={post}
@@ -149,7 +162,12 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
 
       {post.media.length > 0 ? (
         <View style={styles.mediaPad}>
-          <PostMedia media={post.media} onOpen={setViewerIndex} />
+          <PostMedia
+            media={post.media}
+            onOpen={setViewerIndex}
+            postId={post.id}
+            top={top}
+          />
         </View>
       ) : null}
 
@@ -179,18 +197,40 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
           />
         ) : null}
 
+        {engagement.problem ? (
+          <StatusBanner
+            tone="error"
+            title="Couldn't update like"
+            description={engagement.problem}
+            onRetry={engagement.dismissProblem}
+          />
+        ) : null}
+
+        {/* The count row sits above the buttons, which is where both Instagram and
+            LinkedIn put it, and it only renders when the server has actually
+            counted something. */}
+        <EngagementSummary
+          likeCount={engagement.likeCount}
+          commentCount={engagement.commentCount}
+          likedByMe={engagement.likedByMe}
+          onOpenComments={() => setCommentsOpen(true)}
+        />
+
         <PostActionBar
-          liked={liked}
+          liked={engagement.likedByMe}
+          likeCount={engagement.likeCount}
+          commentCount={engagement.commentCount}
+          isUpdating={engagement.isUpdating}
           saved={saved}
-          onLike={() => toggleLike(post.id)}
+          onLike={engagement.toggleLike}
           onComment={() => setCommentsOpen(true)}
           onSave={() => toggleSave(post.id)}
           onShare={handleShare}
         />
 
-        {liked || saved ? (
+        {saved ? (
           <AppText variant="caption" style={styles.localNote}>
-            {`${engagementNote} — ${LOCAL_ENGAGEMENT_NOTE}.`}
+            {`Saved — ${LOCAL_ENGAGEMENT_NOTE}.`}
           </AppText>
         ) : null}
       </View>

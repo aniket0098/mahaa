@@ -81,16 +81,71 @@ export interface PickedMedia {
 /** Progress reported by the native upload task, 0..1. */
 export type UploadProgress = { readonly fraction: number };
 
+/**
+ * The mirrored bearer token, and who is interested in it changing.
+ *
+ * **Why this is a store and not a plain variable.** `cachedToken` is filled by
+ * {@link primeMediaAuth}, which is async, while every media source is built
+ * during a synchronous render. So the first render of a feed card happens *before*
+ * the token is in memory, and the source it captured has no `Authorization` in it.
+ * With a plain variable nothing ever told React that the value had changed, so the
+ * card kept that headerless source for its whole life.
+ *
+ * That is exactly what the live two-user browser run caught: the post arrived in
+ * real time with the right author and caption, and its image stayed an empty grey
+ * box while the same session could fetch those very bytes with a token attached
+ * (`200 image/png, 96146 bytes`).
+ *
+ * Subscribers let the surfaces re-render once the token lands, so the source they
+ * build on the second pass carries the header. `useSyncExternalStore` is the
+ * right shape for this: the token is external mutable state, and a version counter
+ * is a stable snapshot for it to compare.
+ */
 let cachedToken: string | null = null;
+const mediaAuthListeners = new Set<() => void>();
+let mediaAuthVersion = 0;
+
+/** Called when the cached token changes, so dependents can re-read it. */
+function notifyMediaAuthChanged(): void {
+  mediaAuthVersion += 1;
+  for (const listener of mediaAuthListeners) listener();
+}
+
+/**
+ * Subscribe to the token cache. Paired with {@link getMediaAuthVersion} for
+ * `useSyncExternalStore`; the returned function unsubscribes.
+ */
+export function subscribeMediaAuth(listener: () => void): () => void {
+  mediaAuthListeners.add(listener);
+  return () => {
+    mediaAuthListeners.delete(listener);
+  };
+}
+
+/**
+ * A number that changes whenever the token cache does.
+ *
+ * A version rather than the token itself, because `useSyncExternalStore` requires
+ * a snapshot that is cheap and referentially stable between changes, and handing
+ * out the token would put a credential in a value React compares and may retain.
+ */
+export function getMediaAuthVersion(): number {
+  return mediaAuthVersion;
+}
 
 /** Loads the bearer token into the in-memory cache used for media reads. */
 export async function primeMediaAuth(): Promise<void> {
-  cachedToken = await tokenStorage.get();
+  const token = await tokenStorage.get();
+  if (token === cachedToken) return;
+  cachedToken = token;
+  notifyMediaAuthChanged();
 }
 
 /** Drops the cached token, so a signed-out user cannot read a stale feed's media. */
 export function clearMediaAuth(): void {
+  if (cachedToken === null) return;
   cachedToken = null;
+  notifyMediaAuthChanged();
 }
 
 /**
@@ -99,21 +154,43 @@ export function clearMediaAuth(): void {
  *
  * A served path such as `/api/v1/media/{id}` is joined onto the configured base
  * URL — never a hard-coded host — and the token is attached, because the API only
- * serves bytes to the uploader. Any other uri (a development demo image, which is
- * a `data:` string) is passed through untouched with no header, so demo content
- * renders through the same component without pretending to be server media.
+ * serves bytes to authenticated callers. Any other uri (a development demo image,
+ * which is a `data:` string) is passed through untouched with no header, so demo
+ * content renders through the same component without pretending to be server
+ * media.
+ *
+ * **`headers` is omitted, not returned empty, when there is no token.**
+ *
+ * This is not a style preference. On web, `expo-image`'s `useHeaders` asks only
+ * whether `source.headers` is *truthy*, not whether it contains anything:
+ *
+ *   if (!source?.headers) return source;   // plain <img src>, loads or fails visibly
+ *   if (!objectURL)        return null;    // renders NOTHING until the fetch resolves
+ *
+ * An empty object is truthy, so returning `headers: {}` took the second branch
+ * with no `Authorization` to send. The request was refused, `onError` fired, and
+ * the card kept an **empty grey frame forever** — no image, no error message, no
+ * request the page had logged. Confirmed live in Edge against a post whose bytes
+ * the same session could fetch successfully (200, `image/png`, 96146 bytes) the
+ * moment a real header was attached.
+ *
+ * Omitting the key lets `expo-image` fall back to a plain `<img>`, which either
+ * loads (a public uri) or fails loudly through `onError` — so the card's own
+ * "This image could not be loaded" state can actually appear. An empty frame that
+ * can never resolve and never explains itself is the one outcome to avoid.
  */
 export function authenticatedImageSource(uri: string): {
   uri: string;
-  headers: Record<string, string>;
+  headers?: Record<string, string>;
 } {
   if (uri.startsWith(env.apiBaseUrl)) {
-    return {
-      uri,
-      headers: cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {},
-    };
+    // No token yet: return the bare uri, and let the component surface a real
+    // failure rather than waiting on a request that was never authorised.
+    return cachedToken
+      ? { uri, headers: { Authorization: `Bearer ${cachedToken}` } }
+      : { uri };
   }
-  return { uri, headers: {} };
+  return { uri };
 }
 
 /**

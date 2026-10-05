@@ -24,7 +24,7 @@
  * remember to do it.
  */
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import {
   StyleSheet,
   Text,
@@ -34,7 +34,12 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 
-import { absoluteMediaUri, authenticatedImageSource } from '@/api/media';
+import {
+  absoluteMediaUri,
+  authenticatedImageSource,
+  getMediaAuthVersion,
+  subscribeMediaAuth,
+} from '@/api/media';
 import { colors, radius, typography } from '@/theme/tokens';
 
 export type AvatarSize = 32 | 40 | 56 | 96;
@@ -101,6 +106,16 @@ export function Avatar({ name, src = null, size = 40, shape = 'circle', style }:
   const showImage = resolved !== null && failedUrl !== resolved;
   const tint = tintFor(name);
   const palette = tintColors[tint];
+
+  /**
+   * Re-render once the session token reaches the media cache.
+   *
+   * The source is built during render while the token is mirrored into memory
+   * asynchronously, so the first render's source carries no `Authorization` and
+   * nothing would otherwise rebuild it. See the same subscription in `PostMedia`,
+   * which this matches: both are surfaces that read private bytes.
+   */
+  useSyncExternalStore(subscribeMediaAuth, getMediaAuthVersion, getMediaAuthVersion);
 
   return (
     <View

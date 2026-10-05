@@ -7,7 +7,8 @@
  *  - the real half of the stream is the candidate's **own** records, and only
  *    their own records;
  *  - ordering follows the record's real timestamp;
- *  - **no post carries an engagement count**, because no engagement API exists;
+ *  - **every post carries server-counted engagement**, and the client never
+ *    computes a count of its own;
  *  - no filter promises a personalised ranking;
  *  - media sizing never crops, and never produces `NaN`.
  */
@@ -154,8 +155,13 @@ function makePost(overrides: Partial<FeedPost> = {}): FeedPost {
     achievement: null,
     tags: [],
     createdAt: '2026-03-01T00:00:00Z',
+    // A post with no interactions. Real counts come from the server, so the
+    // fixture default is the only honest value a local post can hold.
+    engagement: { likeCount: 0, commentCount: 0, likedByMe: false },
     author: {
       name: 'Ada Lovelace',
+      username: 'ada',
+      publicId: 'pub_ada',
       headline: null,
       avatarUrl: null,
       profileHref: '/profile',
@@ -178,6 +184,10 @@ describe('fromProfileRecords', () => {
     const posts = fromProfileRecords(makeProfile({ projects: [project] }));
     expect(posts[0].author).toEqual({
       name: 'Ada Lovelace',
+      // The caller's own handles. `public_id` is on the profile aggregate; the
+      // *handle* is not, so it stays null rather than being invented.
+      username: null,
+      publicId: 'pub1',
       headline: 'Software Engineering Intern',
       avatarUrl: null,
       profileHref: '/profile',
@@ -197,11 +207,18 @@ describe('fromProfileRecords', () => {
     expect(posts.every((post) => post.author.verified === false)).toBe(true);
   });
 
-  it('carries no engagement count of any kind', () => {
+  it('carries server engagement as an explicit zero, never a loose count', () => {
     const post = fromProfileRecords(makeProfile({ projects: [project] }))[0] as FeedPost &
       Record<string, unknown>;
-    for (const key of ['likes', 'comments', 'shares', 'bookmarks', 'counts', 'engagement']) {
-      expect(post[key], `post must not carry ${key}`).toBeUndefined();
+
+    // A profile record was never *published*, so it has no server-side engagement.
+    // Zero is the honest value; absent would force every reader to guess.
+    expect(post.engagement).toEqual({ likeCount: 0, commentCount: 0, likedByMe: false });
+
+    // The loose shapes the old model used are still forbidden, so a card cannot
+    // reach for a number that nothing in this codebase maintains.
+    for (const key of ['likes', 'comments', 'shares', 'bookmarks', 'counts', 'likeCount']) {
+      expect(post[key], `post must not carry a loose ${key}`).toBeUndefined();
     }
   });
 

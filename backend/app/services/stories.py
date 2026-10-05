@@ -53,6 +53,7 @@ from app.models.enums import StoryPublisherKind, StoryStatus
 from app.models.media import MediaAsset
 from app.models.stories import Story, StoryView
 from app.models.user import User
+from app.realtime import content_events
 from app.schemas.common import FastApiPage, build_fastapi_page
 from app.schemas.stories import (
     StoryCreate,
@@ -352,6 +353,16 @@ def create_story(session: Session, principal: User, payload: StoryCreate) -> Sto
     # `expire_on_commit` is on, so server defaults are not populated on the instance
     # yet; re-reading is what makes the 201 body the *stored* story.
     session.refresh(story)
+    # Announced **after** the commit above. Every member's story tray learns about
+    # this story from the event and then re-reads it over REST; publishing inside
+    # the transaction would announce a story a rollback could still erase. §10.1
+    # gives stories no per-viewer ACL, so the audience is every member — the same
+    # set `GET /stories` already returns it to.
+    content_events.story_created(
+        story_id=str(story.id),
+        author_id=str(story.author_id),
+        created_at=story.created_at.isoformat(),
+    )
     return _to_out(story, _publisher_out(story), False)
 
 

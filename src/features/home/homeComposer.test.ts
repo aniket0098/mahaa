@@ -25,6 +25,7 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.met
 
 const home = read('../../app/(candidate)/home.tsx');
 const card = read('../home/HomeComposerCard.tsx');
+const addPost = read('../../app/(candidate)/add-post.tsx');
 
 describe('Home renders the create-post entry', () => {
   it('mounts the composer card on the Home screen', () => {
@@ -44,7 +45,9 @@ describe('Home renders the create-post entry', () => {
   });
 
   it('shows the caller a prompt rather than an empty box', () => {
-    expect(card).toContain('What do you want to share?');
+    // The prompt is the same idea as the composer's own, and it is a *label*
+    // rather than a fake text field: nothing here types anything.
+    expect(card).toContain('What are you working on?');
   });
 });
 
@@ -52,9 +55,29 @@ describe('the entry navigates to the one composer', () => {
   it('opens /add-post rather than mounting a second composer', () => {
     // Duplicating the draft/upload logic would give two definitions of what
     // counts as a publishable post.
-    expect(home).toContain("router.push('/add-post'");
+    expect(home).toContain("'/add-post'");
     expect(card).not.toContain('createPost');
     expect(card).not.toContain('uploadPickedImage');
+  });
+
+  it('passes the tapped type, so a chip is not a decoration', () => {
+    // The regression this pins: every chip used to open a *blank* composer, so
+    // tapping "Project" or "Video" silently produced a text post instead. The
+    // type now rides along on the navigation.
+    expect(home).toContain('`/add-post?type=${type}`');
+    expect(card).toContain('onPress={() => onCompose(type.value)}');
+    // ...and the composer reads and validates it, rather than accepting anything.
+    expect(addPost).toContain('useLocalSearchParams');
+    expect(addPost).toContain('COMPOSER_TYPES.find');
+  });
+
+  it('routes stories to the story screen, not to the post composer', () => {
+    // A story is a different record with a different endpoint. Folding it into
+    // the post composer would mean one screen building two unrelated requests.
+    expect(card).toContain('onCreateStory');
+    expect(card).toContain('testID="home-composer-type-story"');
+    expect(home).toContain("'/add-story'");
+    expect(card).not.toContain("'/add-story'");
   });
 
   it('carries an accessible label and a 48px touch target', () => {

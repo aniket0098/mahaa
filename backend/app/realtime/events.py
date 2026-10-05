@@ -33,6 +33,14 @@ instance must see every event anyway to route it.
 **`topic` is nullable and unused in this phase.** It exists so the messaging
 phase can address a conversation without redesigning the envelope. It is not
 authorisation: nothing may subscribe by topic yet.
+
+**Phase 12 added the one exception to "untargeted means nobody".** An event in
+:data:`BROADCAST_EVENT_TYPES` with no recipient is a fan-out to every connected
+member. The decision is made once, in the event vocabulary, by the domains that
+own the audience — and it matches what REST already authorises, because
+``GET /posts`` and ``GET /stories`` are readable by any authenticated member. A
+broadcast is still only a *notification*: the payload carries identifiers, and
+the client re-fetches the authoritative row over REST.
 """
 
 from __future__ import annotations
@@ -70,6 +78,19 @@ class EventType:
     #: public shape, so the client renders from the same fields REST returns.
     NOTIFICATION_CREATED = "notification.created"
 
+    #: Phase 12 — content. ``post.created`` / ``story.created`` are published
+    #: **after** the post or story transaction commits, and are **untargeted**:
+    #: see :data:`BROADCAST_EVENT_TYPES`.
+    #:
+    #: ``post.updated`` / ``post.deleted`` exist so a reader's cached copy of a
+    #: card cannot outlive the row it describes — a soft-deleted post is gone
+    #: from every REST read, so without these a reader would keep rendering it
+    #: until they pulled to refresh.
+    POST_CREATED = "post.created"
+    POST_UPDATED = "post.updated"
+    POST_DELETED = "post.deleted"
+    STORY_CREATED = "story.created"
+
 
 #: Every type this build can produce. An inbound event outside this set is
 #: rejected rather than forwarded, so a future publisher cannot accidentally
@@ -83,6 +104,43 @@ KNOWN_EVENT_TYPES: frozenset[str] = frozenset(
         EventType.MESSAGE_CREATED,
         EventType.CONVERSATION_READ,
         EventType.NOTIFICATION_CREATED,
+        EventType.POST_CREATED,
+        EventType.POST_UPDATED,
+        EventType.POST_DELETED,
+        EventType.STORY_CREATED,
+    }
+)
+
+#: The types that go to **every connected member** rather than to one recipient.
+#:
+#: Phase 1 dropped every untargeted event, and the reason given was that
+#: "broadcasting would mean the publisher had decided every connected user
+#: should see it, which is a later-phase decision that must be made with
+#: knowledge of the audience". This is that decision, and it is narrow:
+#:
+#: * ``GET /posts`` is readable by *any* authenticated member and is not scoped
+#:   by connections (`services.posts.list_posts` applies no social-graph
+#:   filter), so **every** member is already entitled to know a post exists.
+#:   Targeting only connected users would leave a public post invisible in
+#:   realtime to exactly the people who can read it over REST.
+#: * ``GET /stories`` is the same: §10.1 states there is no per-viewer story
+#:   ACL in V1.
+#:
+#: So the audience is "every connected member", which is what REST already
+#: authorises. **The payload stays a notification**: an id, the author id and a
+#: timestamp. It carries no media bytes, no token and no profile data, and the
+#: client must answer it by re-fetching the authoritative row over REST — the
+#: socket is an optimisation, PostgreSQL remains the source of truth.
+#:
+#: A future per-viewer content visibility rule changes this set, and nothing
+#: else: the hub routes on membership of this frozenset rather than on a
+#: decision made per socket.
+BROADCAST_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        EventType.POST_CREATED,
+        EventType.POST_UPDATED,
+        EventType.POST_DELETED,
+        EventType.STORY_CREATED,
     }
 )
 
@@ -172,10 +230,12 @@ class RealtimeEvent:
     def is_for(self, user_id: str) -> bool:
         """Whether this event is addressed to ``user_id``.
 
-        An event with no recipient is a broadcast and is delivered to nobody
-        through this method: broadcasting would mean the publisher had decided
-        every connected user should see it, which is a later-phase decision
-        that must be made with knowledge of the audience.
+        An event with no recipient belongs to nobody through this method: it is
+        a *broadcast*, and whether one exists is decided by
+        :data:`BROADCAST_EVENT_TYPES` in the hub rather than here. ``is_for``
+        stays the narrow question it has always been — "does this event name
+        me?" — so adding a broadcast type cannot quietly widen what a targeted
+        lookup returns.
         """
         return self.recipient_user_id is not None and self.recipient_user_id == user_id
 

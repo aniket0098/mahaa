@@ -74,10 +74,28 @@ describe('the feed reaches the API only through the api layer', () => {
     expect(composer).not.toMatch(/demoFeed|DEMO_POST|'demo-|\"demo-/);
   });
 
-  it('has no query key for a like, comment, or bookmark — no such endpoint exists', () => {
+  it('has query keys for the interaction routes the API actually serves', () => {
     const keys = readFileSync(`${API_DIR}queryKeys.ts`, 'utf8');
     expect(keys).toMatch(/posts:/);
-    expect(keys).not.toMatch(/comments|bookmarks|likes/i);
+    // Likes and comments are real now, so their keys exist. There is deliberately
+    // still no saving key: saving is session-scoped device state with no server
+    // route, and a key for it would be a promise the API does not keep. Asserted
+    // against the *key names* rather than the file text, because these docs
+    // legitimately explain why saving has none.
+    expect(keys).toMatch(/postComments\s*:/);
+    expect(keys).not.toMatch(/^\s*\w*[Bb]ookmarks?\w*\s*:/m);
+  });
+
+  it('talks only to the engagement routes the backend really has', () => {
+    const source = readFileSync(`${API_DIR}posts.ts`, 'utf8');
+    // Every call must resolve under `/posts`. A like at `/likes/{id}` or a comment
+    // at `/post-comments` would be a route the server does not serve, and would
+    // only be discovered as a 404 at runtime.
+    for (const call of source.matchAll(/apiClient\.\w+<[^>]*>\(`([^`]+)`/g)) {
+      expect(call[1], `unexpected request target: ${call[1]}`).toMatch(/^\/posts/);
+    }
+    expect(source).toContain('/like');
+    expect(source).toContain('/comments');
   });
 });
 

@@ -30,7 +30,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { absoluteMediaUri } from '@/api/media';
-import { COMPOSER_TYPES } from '@/features/composer/composerModel';
+import { COMPOSER_TYPES, type ComposerType } from '@/features/composer/composerModel';
 import { colors, radius, spacing } from '@/theme/tokens';
 
 export interface HomeComposerCardProps {
@@ -38,11 +38,25 @@ export interface HomeComposerCardProps {
   name: string;
   /** Relative or absolute avatar path from the profile aggregate. */
   avatarUrl?: string | null;
-  /** Opens the composer. */
-  onCompose: () => void;
+  /**
+   * Opens the post composer, optionally with a type preselected.
+   *
+   * A parameter rather than a fixed path so a chip can be *honest*: tapping
+   * "Project" opened a blank text composer before, which is the "attractive but
+   * broken" outcome this card is meant to avoid. The composer still owns the
+   * draft either way.
+   */
+  onCompose: (type?: ComposerType) => void;
+  /** Opens story creation. A separate destination, not a post type. */
+  onCreateStory: () => void;
 }
 
-export function HomeComposerCard({ name, avatarUrl, onCompose }: HomeComposerCardProps) {
+export function HomeComposerCard({
+  name,
+  avatarUrl,
+  onCompose,
+  onCreateStory,
+}: HomeComposerCardProps) {
   const avatarSrc = avatarUrl ? absoluteMediaUri(avatarUrl) : null;
 
   return (
@@ -51,13 +65,13 @@ export function HomeComposerCard({ name, avatarUrl, onCompose }: HomeComposerCar
         accessibilityRole="button"
         accessibilityLabel="Create a post"
         accessibilityHint="Opens the post composer"
-        onPress={onCompose}
+        onPress={() => onCompose()}
         style={({ pressed }) => [styles.prompt, pressed ? styles.pressed : null]}
         testID="home-composer-prompt">
         <Avatar name={name} src={avatarSrc} size={40} />
 
         <AppText variant="body" tone="secondary" style={styles.promptText} numberOfLines={1}>
-          What do you want to share?
+          What are you working on?
         </AppText>
 
         <AppIcon
@@ -80,7 +94,9 @@ export function HomeComposerCard({ name, avatarUrl, onCompose }: HomeComposerCar
             accessibilityHint={type.enabled ? type.hint : type.unavailableReason}
             accessibilityState={{ disabled: !type.enabled }}
             disabled={!type.enabled}
-            onPress={onCompose}
+            // The type travels with the navigation, so the composer opens on the
+            // thing that was tapped instead of making the user choose again.
+            onPress={() => onCompose(type.value)}
             style={({ pressed }) => [
               styles.type,
               type.enabled ? null : styles.typeDisabled,
@@ -100,6 +116,31 @@ export function HomeComposerCard({ name, avatarUrl, onCompose }: HomeComposerCar
             </AppText>
           </Pressable>
         ))}
+
+        {/*
+          Story is **not** a `COMPOSER_TYPES` entry and deliberately not added to
+          it: a story is a different record with a different endpoint and a
+          different shape (`content_type` + one optional `media_id`), so folding it
+          into the post composer would mean one screen that builds two unrelated
+          requests. It is listed here because this is the page's create menu, and
+          leaving it out would hide a feature that now works.
+        */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create a story"
+          accessibilityHint="Share something for 24 hours"
+          onPress={onCreateStory}
+          style={({ pressed }) => [styles.type, pressed ? styles.pressed : null]}
+          testID="home-composer-type-story">
+          <AppIcon
+            name={{ ios: 'circle.dashed', android: 'album' }}
+            size={18}
+            color={colors.colorTextSecondary}
+          />
+          <AppText variant="small" tone="secondary" numberOfLines={1}>
+            Story
+          </AppText>
+        </Pressable>
       </View>
     </Card>
   );

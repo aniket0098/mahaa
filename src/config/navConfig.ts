@@ -177,6 +177,12 @@ export const CANDIDATE_DETAIL_ROUTES: readonly DetailRoute[] = [
   { path: '/community', title: 'Community', implemented: false },
   { path: '/saved', title: 'Saved', implemented: false },
   { path: '/add-post', title: 'Add post', implemented: true },
+  /**
+   * Story publication. Phase 12 added the screen because `POST /stories` had
+   * always existed on the server with no mobile caller, which made a story
+   * readable but never creatable.
+   */
+  { path: '/add-story', title: 'New story', implemented: true },
   { path: '/innovation-lab', title: 'Innovation Lab', implemented: false },
   { path: '/profile/skills', title: 'Skills', implemented: true },
   { path: '/profile/education', title: 'Education', implemented: true },

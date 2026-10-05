@@ -54,6 +54,10 @@ const mockPost = vi.fn(async () => ({
     public_id: 'x',
     username: 'u',
   },
+  // A newly created post has no engagement, and the server sends that explicitly
+  // rather than omitting the block. The mock mirrors the real contract, so a
+  // mapper that started reaching for a missing field would fail here too.
+  engagement: { like_count: 0, comment_count: 0, liked_by_me: false },
 }));
 
 vi.mock('@/api/client', () => ({

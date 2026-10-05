@@ -263,7 +263,10 @@ def test_ordinary_education_values_are_accepted(api_client, candidate) -> None:
     """
 
     names = [
-        ("Government College of Engineering, Nagpur", "B.Tech. Computer Science & Engineering"),
+        (
+            "Government College of Engineering, Nagpur",
+            "B.Tech. Computer Science & Engineering",
+        ),
         ("St. Xavier's College - Mumbai", "B.E. Computer Engineering"),
         ("Smt. XYZ College", "12th (HSC)"),
         ("Réseau Polytechnique", "Master of Science — Data Science"),

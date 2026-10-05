@@ -33,7 +33,8 @@ def _state(api_client, account) -> dict:
 def _about(api_client, account) -> dict:
     """The ``about`` step's own verdict, so a test reads as a claim about it."""
 
-    return next(step for step in _state(api_client, account)["steps"] if step["key"] == "about")
+    steps = _state(api_client, account)["steps"]
+    return next(step for step in steps if step["key"] == "about")
 
 
 def _add_skill(api_client, account, skill) -> None:
@@ -203,7 +204,9 @@ def test_the_percent_rises_only_when_a_real_step_completes(
     # The profile score, unlike the wizard gate, still wants three skills. This is
     # where the three-skill rule lives now: it describes how good a profile is,
     # and can never be read as "your save failed".
-    completeness = api_client.get("/api/v1/profile/completeness", headers=candidate.headers)
+    completeness = api_client.get(
+        "/api/v1/profile/completeness", headers=candidate.headers
+    )
     skills = next(s for s in completeness.json()["sections"] if s["key"] == "skills")
     assert skills["complete"] is True
 
@@ -229,7 +232,9 @@ def test_about_completes_with_zero_skills(api_client, candidate) -> None:
 
     # And the wizard is genuinely finishable: only `basics` remains.
     state = _state(api_client, candidate)
-    outstanding = [s["key"] for s in state["steps"] if s["required"] and not s["complete"]]
+    outstanding = [
+        s["key"] for s in state["steps"] if s["required"] and not s["complete"]
+    ]
     assert outstanding == ["basics"]
 
 

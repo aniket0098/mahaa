@@ -18,6 +18,13 @@ must not be able to stop the server talking to everyone else.
 
 **Nothing here blocks.** Every send is awaited inside its own ``try``, so a slow
 or wedged peer cannot stall the event loop or delay an unrelated user's event.
+
+**Delivery is targeted or broadcast, and the split is by event type.** A
+``recipient_user_id`` names one user. A type in ``events.BROADCAST_EVENT_TYPES``
+with no recipient goes to every connected socket — the content events, whose
+audience is every member because the feed has no per-viewer ACL. Anything else
+untargeted is still dropped, so the Phase 1 rule that broadcasting is not a
+transport default survives except where a domain deliberately widened it.
 """
 
 from __future__ import annotations
@@ -27,7 +34,7 @@ from collections import defaultdict
 from typing import Any
 
 from app.core.logging import get_logger
-from app.realtime.events import EventType, RealtimeEvent
+from app.realtime.events import BROADCAST_EVENT_TYPES, EventType, RealtimeEvent
 
 logger = get_logger("mahaa.realtime.hub")
 
@@ -119,17 +126,51 @@ class RealtimeHub:
     async def deliver(self, event: RealtimeEvent) -> int:
         """Route one event from the bus to whichever local sockets it targets.
 
-        The authorisation decision is "does this event name me?" — nothing more.
-        A client cannot ask for another user's events, and nothing is broadcast
-        on the strength of a client-supplied topic.
+        Two shapes, and only two:
+
+        1. **Targeted.** ``recipient_user_id`` names somebody. The decision
+           "does this event name me?" is the whole authorisation check, and
+           nothing is sent on the strength of a client-supplied topic.
+        2. **Broadcast.** No recipient, and the type is in
+           :data:`BROADCAST_EVENT_TYPES`. These are the content events, and
+           the audience is every connected member — which is what REST already
+           grants, since the feed and the story tray have no per-viewer ACL.
+
+        An untargeted event of any *other* type is still dropped, exactly as
+        Phase 1 dropped it. The broadcast set is the whole exception, and it is
+        a set of event types rather than a client-supplied flag, so no socket
+        can ask to receive a fan-out by naming a topic.
         """
         recipient = event.recipient_user_id
         if recipient is None:
-            # Untargeted events are dropped rather than broadcast: who should see
-            # them is a decision that needs the audience, and that belongs to the
-            # publishing domain, not to the transport.
-            return 0
+            if event.event_type not in BROADCAST_EVENT_TYPES:
+                # Not a fan-out type: who should see this needs an audience it
+                # does not have, so it is dropped rather than guessed.
+                return 0
+            return await self.broadcast_content(event)
         return await self.send_to_user(recipient, event)
+
+    async def broadcast_content(self, event: RealtimeEvent) -> int:
+        """Send one content event to every connected socket.
+
+        Separate from :meth:`broadcast_system`, and deliberately not a rename of
+        it: that one is for this instance's own lifecycle notices and carries
+        no application data, while this one carries a committed content change
+        and exists so a second member's feed learns about it without polling.
+
+        The same isolation properties hold — every send is awaited inside its
+        own ``try``, and a socket that refuses is discarded rather than
+        retried — because a phone that lost signal must not be able to stop the
+        server talking to everyone else.
+        """
+        delivered = 0
+        for user_id, sockets in list(self._sockets.items()):
+            for websocket in list(sockets):
+                if await self.send_to_socket(websocket, event):
+                    delivered += 1
+                else:
+                    self.discard(user_id, websocket)
+        return delivered
 
     async def broadcast_system(self, event: RealtimeEvent) -> int:
         """Send to every connected socket, used only for this instance's own

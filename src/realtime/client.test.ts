@@ -595,12 +595,18 @@ describe('catchUpMessagingAfterReconnect', () => {
     vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined as never);
   });
 
-  it('marks only messaging and notification keys stale', () => {
+  it('marks only messaging, notification and content keys stale', () => {
+    // The content keys are here because a socket has no durable log: a post or
+    // story published while this client was offline exists only in PostgreSQL, so
+    // the reconnect is the only chance to ask for it. REST is the source of
+    // truth; the socket is the optimisation.
     catchUpMessagingAfterReconnect();
     expect(invalidatedKeys()).toEqual([
       ['conversations'],
       ['notifications'],
       ['notifications', 'unread-count'],
+      ['posts'],
+      ['stories'],
     ]);
   });
 
@@ -620,11 +626,11 @@ describe('catchUpMessagingAfterReconnect', () => {
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
 
     client.__test_setStatus('open');
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(3);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(5);
 
     // Staying open must not keep invalidating.
     client.__test_setStatus('open');
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(3);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(5);
 
     unbind();
     setRealtimeClient(null);
@@ -643,5 +649,137 @@ describe('catchUpMessagingAfterReconnect', () => {
     expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
 
     setRealtimeClient(null);
+  });
+});
+
+describe('Phase 12 content events', () => {
+  /** A `post.*` event as the backend stamps it: ids and a timestamp, no body. */
+  function postEvent(type: string, overrides: Record<string, unknown> = {}) {
+    return parseRealtimeEvent(
+      envelope({
+        event_id: 'evt-post-1',
+        event_type: type,
+        payload: {
+          post_id: 'p-1',
+          author_id: 'u-1',
+          created_at: '2026-10-04T00:00:00+00:00',
+          ...overrides,
+        },
+      }),
+    )!;
+  }
+
+  function storyEvent(overrides: Record<string, unknown> = {}) {
+    return parseRealtimeEvent(
+      envelope({
+        event_id: 'evt-story-1',
+        event_type: 'story.created',
+        payload: {
+          story_id: 's-1',
+          author_id: 'u-1',
+          created_at: '2026-10-04T00:00:00+00:00',
+          ...overrides,
+        },
+      }),
+    )!;
+  }
+
+  beforeEach(() => {
+    vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined as never);
+  });
+
+  it('parses every content type the backend publishes', () => {
+    // A type the client does not know is dropped by `parseRealtimeEvent`, so an
+    // event the app cannot handle would fail *silently* — no error, no refetch.
+    // This is the guard that keeps the two vocabularies in step.
+    for (const type of ['post.created', 'post.updated', 'post.deleted', 'story.created']) {
+      expect(parseRealtimeEvent(envelope({ event_type: type, payload: {} })), type).not.toBeNull();
+    }
+  });
+
+  it('still drops a content type nobody publishes', () => {
+    expect(parseRealtimeEvent(envelope({ event_type: 'post.liked' }))).toBeNull();
+  });
+
+  for (const type of ['post.created', 'post.updated', 'post.deleted']) {
+    it(`${type} refreshes the posts branch and nothing else`, () => {
+      expect(applyRealtimeEvent(postEvent(type))).toBe(true);
+      expect(invalidatedKeys()).toEqual([['posts']]);
+    });
+
+    it(`${type} does nothing without a post id`, () => {
+      // Guessing a key on an empty payload would refresh a feed on behalf of a
+      // row nobody announced.
+      expect(applyRealtimeEvent(postEvent(type, { post_id: '' }))).toBe(false);
+      expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+    });
+  }
+
+  it('story.created refreshes the stories branch and nothing else', () => {
+    expect(applyRealtimeEvent(storyEvent())).toBe(true);
+    expect(invalidatedKeys()).toEqual([['stories']]);
+  });
+
+  it('story.created without a story id does nothing', () => {
+    expect(applyRealtimeEvent(storyEvent({ story_id: undefined }))).toBe(false);
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the feed without writing anything into the cache', () => {
+    // The payload is an id, not a post. `setQueryData` here would create a second
+    // rendering path that cannot know the author's avatar, the real engagement
+    // counts, or whether a story expired — so the only honest response is REST.
+    const setQueryData = vi
+      .spyOn(queryClient, 'setQueryData')
+      .mockImplementation(() => undefined as never);
+    const getQueryData = vi
+      .spyOn(queryClient, 'getQueryData')
+      .mockImplementation(() => undefined as never);
+
+    applyRealtimeEvent(postEvent('post.created'));
+
+    expect(setQueryData).not.toHaveBeenCalled();
+    expect(getQueryData).not.toHaveBeenCalled();
+  });
+
+  it('never invalidates the whole cache for a content event', () => {
+    // A blanket invalidation on every frame would be polling, only more
+    // expensive: the socket would refetch the profile, connections and everything
+    // else each time anybody posts.
+    for (const type of ['post.created', 'post.updated', 'post.deleted']) {
+      (queryClient.invalidateQueries as unknown as Mock).mockClear();
+      applyRealtimeEvent(postEvent(type));
+      for (const key of invalidatedKeys()) {
+        expect(key).toEqual(['posts']);
+      }
+    }
+  });
+
+  it('never invalidates a messaging or notification key for a content event', () => {
+    // Content, messaging and notifications are separate domains. A post must not
+    // cost a conversation refetch.
+    applyRealtimeEvent(postEvent('post.created'));
+    applyRealtimeEvent(storyEvent());
+    for (const key of invalidatedKeys()) {
+      expect(['posts', 'stories']).toContain(key[0]);
+    }
+  });
+
+  it('is harmless when the same event arrives twice', () => {
+    // The socket already deduplicates by `event_id`; invalidation is idempotent,
+    // so neither layer is the other's safety net.
+    applyRealtimeEvent(postEvent('post.created'));
+    applyRealtimeEvent(postEvent('post.created'));
+    expect(invalidatedKeys()).toEqual([['posts'], ['posts']]);
+  });
+
+  it('uses the bare posts prefix, which covers mine and comments too', () => {
+    // `['posts']` is a prefix: React Query matches on leading segments, so this
+    // one call also refreshes `['posts','mine']` and `['posts',id,'comments']`.
+    // Asserting the exact key is what pins that decision — a narrower key such as
+    // `['posts','feed']` would silently stop the profile's own list updating.
+    applyRealtimeEvent(postEvent('post.created'));
+    const [key] = invalidatedKeys();
+    expect(key).toEqual(['posts']);
   });
 });

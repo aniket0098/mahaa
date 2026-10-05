@@ -58,7 +58,7 @@ from app.models.experience import Experience
 from app.models.media import STORAGE_KIND_DATABASE, MediaAsset
 from app.models.messaging import Conversation, ConversationMember, Message
 from app.models.notifications import Notification, UserDevice
-from app.models.posts import Post, PostMedia
+from app.models.posts import Post, PostComment, PostLike, PostMedia
 from app.models.profile import (
     Profile,
     ProfileLink,
@@ -106,7 +106,9 @@ __all__ = [
     "OpportunityVisibility",
     "Post",
     "PostCategory",
+    "PostComment",
     "PostKind",
+    "PostLike",
     "PostMedia",
     "Profile",
     "ProfileLink",

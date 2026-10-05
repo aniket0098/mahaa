@@ -46,7 +46,9 @@ import { DashboardHeader } from '@/features/home/DashboardHeader';
 import { LearningSection } from '@/features/home/LearningSection';
 import { OpportunityStories } from '@/features/home/OpportunityStories';
 import { CommunityFeed } from '@/features/feed/CommunityFeed';
+import { setViewport } from '@/features/feed/feedPlayback';
 import { HomeComposerCard } from '@/features/home/HomeComposerCard';
+import type { ComposerType } from '@/features/composer/composerModel';
 import { QuickActions } from '@/features/home/QuickActions';
 import { useStoryList } from '@/features/stories/useStoryList';
 import { styles } from '@/features/home/homeStyles';
@@ -76,10 +78,25 @@ export default function CandidateHomeScreen() {
 
   const stories = useStoryList(storiesQuery.data?.items);
 
+  // The identity the header, the stories row and the composer card all show. Read
+  // from the one profile aggregate rather than re-fetched per section, so the
+  // avatar in a story bubble cannot disagree with the one in the header.
+  const profileName = data?.identity.name ?? principal?.username ?? 'You';
+  const profileAvatar = data?.identity.avatar_url ?? null;
+
   const openProfile = useCallback(() => router.push('/profile' as never), [router]);
   // The Home composer is an entry to the one composer: publishing is owned by
-  // `/add-post`, so this navigates rather than mounting a second copy.
-  const openComposer = useCallback(() => router.push('/add-post' as never), [router]);
+  // `/add-post`, so this navigates rather than mounting a second copy. The tapped
+  // type rides along as a query param so the composer opens on it — one composer,
+  // two entry points to it, and neither has to re-ask what kind of post this is.
+  const openComposer = useCallback(
+    (type?: ComposerType) =>
+      router.push((type ? `/add-post?type=${type}` : '/add-post') as never),
+    [router],
+  );
+  // Stories are a different record, so they get their own screen rather than
+  // becoming a post type the composer would have to special-case.
+  const openStoryComposer = useCallback(() => router.push('/add-story' as never), [router]);
   const openLink = useCallback((url: string) => {
     // Project/credential links are the only outbound URLs, and they open in the
     // system browser rather than inside the app.
@@ -102,17 +119,35 @@ export default function CandidateHomeScreen() {
           { paddingTop: insets.top + spacing.xs, paddingBottom: insets.bottom + spacing.xxl },
         ]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        // **The feed's playback coordinator needs the scroll offset.** A video
+        // cannot know whether it is on screen without knowing where the reader is,
+        // and a nested scroll view inside the feed would break the single page
+        // scroll the Home layout depends on. `scrollEventThrottle` is what turns
+        // this from "on scroll end" into a live signal; without it the coordinator
+        // would only ever see the resting position.
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          const { contentOffset, layoutMeasurement } = event.nativeEvent;
+          setViewport({
+            offset: contentOffset.y,
+            height: layoutMeasurement.height,
+          });
+        }}>
         {/* Chrome, not a page section: the header is chrome, and the first
             content section under it is the story row. */}
         <DashboardHeader principal={principal} />
 
-        <OpportunityStories stories={stories} />
+        {/* The stories row's first bubble needs the caller's own avatar, which
+            Home already has from the same profile aggregate the header reads —
+            so it is threaded through rather than fetched a second time. */}
+        <OpportunityStories stories={stories} name={profileName} avatarUrl={profileAvatar} />
 
         <HomeComposerCard
-          name={data?.identity.name ?? principal.username}
-          avatarUrl={data?.identity.avatar_url ?? null}
+          name={profileName}
+          avatarUrl={profileAvatar}
           onCompose={openComposer}
+          onCreateStory={openStoryComposer}
         />
 
         {/* The composer and the feed sit directly under the Stories row. The feed

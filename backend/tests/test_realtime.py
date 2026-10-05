@@ -173,6 +173,11 @@ def test_the_event_types_are_exactly_what_the_backend_publishes():
         "conversation.read",
         # Phase 3 notifications
         "notification.created",
+        # Phase 12 content
+        "post.created",
+        "post.updated",
+        "post.deleted",
+        "story.created",
     }
 
 

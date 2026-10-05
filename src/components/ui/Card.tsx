@@ -4,7 +4,14 @@
  */
 
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { colors, radius, spacing } from '@/theme/tokens';
 
@@ -16,6 +23,16 @@ export interface CardProps {
   padded?: boolean;
   testID?: string;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Fired when the card's own box is laid out.
+   *
+   * **Needed by the feed's video playback, and only that.** A card holding a video
+   * has to publish its position within the scroll content so the coordinator can
+   * tell whether it is on screen. `onLayout` reports `layout.y` relative to the
+   * parent, which is what the coordinator compares against the scroll offset —
+   * no extra measuring, and no polling.
+   */
+  onLayout?: (event: LayoutChangeEvent) => void;
 }
 
 export function Card({
@@ -26,9 +43,13 @@ export function Card({
   padded = true,
   testID,
   style,
+  onLayout,
 }: CardProps) {
   const content = (
-    <View testID={testID} style={[styles.card, padded ? styles.padded : null, style]}>
+    <View
+      testID={testID}
+      onLayout={onLayout}
+      style={[styles.card, padded ? styles.padded : null, style]}>
       {children}
     </View>
   );

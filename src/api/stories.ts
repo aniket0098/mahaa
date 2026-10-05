@@ -3,6 +3,12 @@
  * `apps/api/app/api/v1/endpoints/stories.py`.
  *
  * Layering: routes -> features -> api -> transport. No direct `fetch`.
+ *
+ * **Three routes were always the client's** (`GET /stories`, `GET /stories/{id}`,
+ * `POST /stories/{id}/view`) and `POST /stories` joined them in Phase 12. The
+ * publication route existed on the server the whole time, marked [F] with "no
+ * mobile caller" — which was true, and was the reason a story could not be
+ * created from the app at all. See {@link createStory}.
  */
 
 import { apiClient } from '@/api/client';
@@ -97,4 +103,47 @@ export async function recordStoryView(storyId: string): Promise<StoryViewResult>
     alreadyRecorded: raw.already_recorded,
     viewedAt: raw.viewed_at,
   };
+}
+
+/**
+ * What `POST /stories` accepts.
+ *
+ * **`content_type` is a story *category*, not a media type.** The server's
+ * vocabulary is `job | internship | announcement | event`
+ * (`StoryContentType`), so an image story is an *announcement* that carries
+ * artwork — not a `content_type` of "image". Sending the media kind here is a 422,
+ * which is why this type cannot be `MediaKind`.
+ *
+ * **`publisher_kind` is deliberately not exposed.** The server accepts only
+ * `platform` today and rejects `company` until the companies domain exists, so
+ * offering the field in the UI would advertise an option that always fails. It
+ * defaults server-side.
+ *
+ * `mediaId` is optional: the backend accepts a text-only story (`media_id: null`),
+ * so a caption is the only hard requirement.
+ */
+export interface CreateStoryInput {
+  readonly contentType: Story['contentType'];
+  readonly caption: string;
+  readonly mediaId?: string | null;
+}
+
+/**
+ * `POST /stories` — publish, and return the server's stored story.
+ *
+ * **Nothing is rendered optimistically.** The returned `Story` is the stored
+ * record, so the caller can put *that* into the cache rather than a locally
+ * assembled one — which is the only version that carries the publisher snapshot
+ * and the server's own `viewed` answer.
+ */
+export async function createStory(input: CreateStoryInput): Promise<Story> {
+  const body: Record<string, unknown> = {
+    content_type: input.contentType,
+    caption: input.caption,
+  };
+  // Only sent when there is one: `null` is a different request from "absent" on
+  // a body the server validates, and an absent optional field is what it wants.
+  if (input.mediaId) body.media_id = input.mediaId;
+
+  return mapStory(await apiClient.post<RawStory>('/stories', { body }));
 }

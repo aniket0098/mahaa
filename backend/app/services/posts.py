@@ -38,17 +38,22 @@ from datetime import UTC, datetime
 
 from fastapi import status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.errors import ApiError, ErrorCode, error_detail
 from app.models.enums import MediaKind, PostCategory
 from app.models.media import MediaAsset
-from app.models.posts import Post, PostMedia
+from app.models.posts import Post, PostComment, PostLike, PostMedia
 from app.models.user import User
+from app.realtime import content_events
 from app.schemas.common import Page, build_page
 from app.schemas.posts import (
+    CommentCreate,
+    CommentRead,
     PostAuthorOut,
     PostCreate,
+    PostEngagementOut,
     PostMediaOut,
     PostUpdate,
     WirePost,
@@ -171,6 +176,15 @@ def _to_wire(post: Post, viewer_id: uuid.UUID, session: Session) -> WirePost:
 
     ``deleted_at`` is deliberately absent: §9.3's soft delete is a storage
     decision, and the queries that call this all exclude tombstones anyway.
+
+    **The engagement block defaults to zero, and that default is load-bearing.**
+    This function runs once per row, and the counts come from a single grouped
+    query over the whole page (:func:`_engagement_map`) rather than from a lookup
+    per row. So the caller that has the page passes the real values in — via
+    :func:`_wire_with_engagement`, or by rebuilding the list in
+    :func:`list_posts` — and only the single-post paths fall through to the zero
+    default. A zero is the honest reading of "no likes, no comments" for a post
+    that has just been created, which is exactly what those paths are.
     """
     return WirePost(
         id=post.id,
@@ -200,6 +214,9 @@ def _to_wire(post: Post, viewer_id: uuid.UUID, session: Session) -> WirePost:
         created_at=post.created_at,
         updated_at=post.updated_at,
         author=_author_out(post.author, session, post.author_id == viewer_id),
+        engagement=PostEngagementOut(
+            like_count=0, comment_count=0, liked_by_me=False
+        ),
     )
 
 
@@ -253,6 +270,18 @@ def create_post(session: Session, principal: User, payload: PostCreate) -> WireP
     # §9.1 promises rather than the in-memory one that was just built.
     session.refresh(post)
     session.refresh(post, attribute_names=["media", "author"])
+
+    # Announced **after** the commit above, never before it. Every other member's
+    # feed learns about this post from this event and then re-reads it over REST;
+    # publishing inside the transaction would announce a row a rollback could
+    # still erase, which is the one failure no client can reconcile. `created_at`
+    # is read after the refresh because it is a server default, not a Python value.
+    content_events.post_created(
+        post_id=str(post.id),
+        author_id=str(post.author_id),
+        created_at=post.created_at.isoformat(),
+    )
+
     return _to_wire(post, principal.id, session)
 
 
@@ -330,6 +359,10 @@ def update_post(
 
     session.commit()
     session.refresh(post)
+    # After the commit, for the same reason `create_post` publishes there: a
+    # reader holding this card must re-read it, and only a committed edit is
+    # worth re-reading.
+    content_events.post_updated(post_id=str(post.id), author_id=str(post.author_id))
     return _to_wire(post, principal.id, session)
 
 
@@ -353,6 +386,9 @@ def delete_post(session: Session, principal: User, raw_id: str) -> None:
 
     post.deleted_at = datetime.now(UTC)
     session.commit()
+    # Announced after the commit: the row is a tombstone now, and every other
+    # member's feed must stop rendering a card that no REST read returns any more.
+    content_events.post_deleted(post_id=str(post.id), author_id=str(post.author_id))
 
 
 def _feed_filters(category: PostCategory | None, author_id: uuid.UUID | None):
@@ -398,6 +434,12 @@ def list_posts(
     disagree. §9.1 is explicit that "`total` must be a real count, not a page
     length", and ``build_page`` derives ``has_more`` from it — a count taken over
     a *different* predicate than the rows would make the pager lie.
+
+    **Engagement is resolved for the whole page in one shot.** The rows are loaded
+    first, then :func:`_engagement_map` is handed every id on the page at once, so
+    the counts cost three queries whether the page holds one post or two hundred.
+    Counting inside the serialisation loop would have been the N+1 this file's
+    scroll performance depends on not having.
     """
     stmt, count = _feed_filters(category, author_id)
     total = session.scalar(count)
@@ -411,8 +453,17 @@ def list_posts(
         .unique()
         .all()
     )
+
+    engagement = _engagement_map(session, principal.id, [post.id for post in rows])
+    zero = PostEngagementOut(like_count=0, comment_count=0, liked_by_me=False)
+
     return build_page(
-        [_to_wire(post, principal.id, session) for post in rows],
+        [
+            _wire_with_engagement(
+                post, principal.id, session, engagement.get(post.id, zero)
+            )
+            for post in rows
+        ],
         total,
         limit,
         offset,
@@ -429,4 +480,289 @@ def get_post(session: Session, principal: User, raw_id: str) -> WirePost:
     soft-deleted one still 404s, because `_load_live_post` filters tombstones.
     """
     post = _load_live_post(session, raw_id)
-    return _to_wire(post, principal.id, session)
+    return _wire_with_engagement(
+        post,
+        principal.id,
+        session,
+        _engagement_for(session, principal.id, post.id),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Engagement — likes and comments                                                #
+# --------------------------------------------------------------------------- #
+
+
+def _engagement_map(
+    session: Session, viewer_id: uuid.UUID, post_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, PostEngagementOut]:
+    """Like/comment counts for a whole page of posts, in **three** queries.
+
+    **This is the single most important performance decision in the file.** The
+    obvious implementation counts per post inside the serialisation loop, which
+    turns one page of 50 posts into 1 + 50 + 50 queries. That is the classic N+1,
+    and on a feed it is the difference between a scroll that glides and one that
+    stutters. Instead the ids of the page are collected first and both aggregates
+    are computed with ``GROUP BY ... WHERE post_id IN (...)``.
+
+    Three queries regardless of page size:
+
+    1. one grouped ``COUNT`` over ``post_likes``;
+    2. one grouped ``COUNT`` over live ``post_comments``;
+    3. one ``SELECT post_id`` for *this* viewer's likes among them.
+
+    The third could be folded into the first with a ``CASE`` aggregate, but keeping
+    it separate makes the viewer's ids one small, index-backed lookup rather than a
+    conditional count evaluated per row.
+
+    **Tombstoned comments are excluded** by ``deleted_at IS NULL`` so a deleted
+    comment never inflates the number the card prints.
+
+    A post absent from the map has zero of everything, which is the correct reading
+    of "no rows" — so a caller never distinguishes "no likes" from "not counted".
+    """
+    if not post_ids:
+        return {}
+
+    wanted = list(dict.fromkeys(post_ids))
+
+    like_counts = dict(
+        session.execute(
+            select(PostLike.post_id, func.count(PostLike.post_id))
+            .where(PostLike.post_id.in_(wanted))
+            .group_by(PostLike.post_id)
+        ).all()
+    )
+
+    comment_counts = dict(
+        session.execute(
+            select(PostComment.post_id, func.count(PostComment.post_id))
+            .where(PostComment.post_id.in_(wanted), PostComment.deleted_at.is_(None))
+            .group_by(PostComment.post_id)
+        ).all()
+    )
+
+    mine = set(
+        session.scalars(
+            select(PostLike.post_id).where(
+                PostLike.post_id.in_(wanted),
+                PostLike.user_id == viewer_id,
+            )
+        ).all()
+    )
+
+    return {
+        post_id: PostEngagementOut(
+            like_count=int(like_counts.get(post_id, 0)),
+            comment_count=int(comment_counts.get(post_id, 0)),
+            liked_by_me=post_id in mine,
+        )
+        for post_id in wanted
+    }
+
+
+def _engagement_for(
+    session: Session, viewer_id: uuid.UUID, post_id: uuid.UUID
+) -> PostEngagementOut:
+    """The same numbers for exactly one post. Shares :func:`_engagement_map`."""
+    return _engagement_map(session, viewer_id, [post_id]).get(
+        post_id,
+        PostEngagementOut(like_count=0, comment_count=0, liked_by_me=False),
+    )
+
+
+def _wire_with_engagement(
+    post: Post, viewer_id: uuid.UUID, session: Session, engagement: PostEngagementOut
+) -> WirePost:
+    """``_to_wire`` plus the engagement block, for the single-post paths."""
+    return _to_wire(post, viewer_id, session).model_copy(
+        update={"engagement": engagement}
+    )
+
+
+def _reload_complete(session: Session, post_id: uuid.UUID) -> Post:
+    """Re-read a post with its media, because ``expire_on_commit`` left it stale.
+
+    ``create_post`` needed this and so do the like/comment routes: any of them may
+    hand the post straight back to the client, and serialising a just-committed
+    object would produce a ``WirePost`` whose ``media`` list is empty.
+    """
+    reloaded = session.scalars(
+        select(Post)
+        .options(selectinload(Post.media).joinedload(PostMedia.asset))
+        .where(Post.id == post_id)
+    ).first()
+    return reloaded if reloaded is not None else session.get(Post, post_id)
+
+
+def like_post(session: Session, principal: User, raw_id: str) -> PostEngagementOut:
+    """``POST /posts/{id}/like`` — idempotent.
+
+    **Liking twice is a success, not a conflict.** This route is the target of a
+    double-tapped heart and of a retried request, and both are the same event
+    arriving twice. §18 covers keyed retries, and the second call converges on the
+    state the first already reached, so a 409 would make a *correct* client look
+    broken.
+
+    **The duplicate is still impossible in the database.** The composite primary
+    key ``(post_id, user_id)`` means a racing second ``INSERT`` raises rather than
+    creating a second row, so this handles the collision by rolling back and
+    re-reading rather than pre-checking. A pre-check would be a TOCTOU bug: two
+    clients can both observe "not liked" and both proceed.
+    """
+    post = _load_live_post(session, raw_id)
+    post_id = post.id
+
+    if session.get(PostLike, {"post_id": post_id, "user_id": principal.id}) is None:
+        session.add(PostLike(post_id=post_id, user_id=principal.id))
+        try:
+            session.commit()
+        except IntegrityError:
+            # Another request for the same pair won the race. That is the expected
+            # outcome of a double tap, so it converges rather than erroring.
+            session.rollback()
+    return _engagement_for(session, principal.id, post_id)
+
+
+def unlike_post(session: Session, principal: User, raw_id: str) -> PostEngagementOut:
+    """``DELETE /posts/{id}/like`` — idempotent.
+
+    **Un-liking something never liked answers 200 with the unchanged counts**
+    rather than 404, for the same reason :func:`like_post` does: the caller's
+    intent ("I do not like this") already holds, and a not-found would make a
+    retry look like a failure. What *is* refused is a post that does not exist,
+    because there is no state to report about it.
+    """
+    post = _load_live_post(session, raw_id)
+    post_id = post.id
+
+    row = session.get(PostLike, {"post_id": post_id, "user_id": principal.id})
+    if row is not None:
+        session.delete(row)
+        session.commit()
+    return _engagement_for(session, principal.id, post_id)
+
+
+def list_comments(
+    session: Session, principal: User, raw_id: str, *, limit: int, offset: int
+) -> Page[CommentRead]:
+    """``GET /posts/{id}/comments`` — newest first, in the shared ``Page`` envelope.
+
+    **Any authenticated member may read any post's comments**, exactly as they may
+    read the post. Scoping comments to the post's author would make a community
+    feed unusable — the whole point is that a reader can respond.
+
+    **Newest first**, matching ``GET /posts`` and ``GET /notifications``. Ascending
+    order would read more like a chat log, but the shared envelope is offset-paged
+    over a total count, so an ascending first page is the *oldest* comments —
+    which is the opposite of what somebody opening the sheet wants. One ordering
+    rule across every paged list in the API is worth more than matching a
+    messenger's layout.
+
+    **The author is loaded eagerly** (``lazy="joined"``) and the rows are
+    ``unique()``-ed, because a joined eager load against a collection would
+    otherwise return one row per joined child and silently duplicate comments.
+    """
+    post = _load_live_post(session, raw_id)
+
+    live = (
+        PostComment.post_id == post.id,
+        PostComment.deleted_at.is_(None),
+    )
+    total = session.scalar(select(func.count()).select_from(PostComment).where(*live))
+    rows = (
+        session.scalars(
+            select(PostComment)
+            .options(joinedload(PostComment.author))
+            .where(*live)
+            .order_by(PostComment.created_at.desc(), PostComment.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        .unique()
+        .all()
+    )
+    return build_page(
+        [
+            CommentRead(
+                id=row.id,
+                post_id=row.post_id,
+                body=row.body,
+                created_at=row.created_at,
+                author=_author_out(row.author, session, row.author_id == principal.id),
+            )
+            for row in rows
+        ],
+        int(total or 0),
+        limit,
+        offset,
+    )
+
+
+def create_comment(
+    session: Session, principal: User, raw_id: str, payload: CommentCreate
+) -> CommentRead:
+    """``POST /posts/{id}/comments`` — the author is the principal, never the body.
+
+    **The comment cannot be written as somebody else.** There is no ``author_id``
+    on the write model, and ``extra="forbid"`` rejects one at parse time, so the
+    only value that can reach the column is ``principal.id``. This is the same rule
+    ``create_post`` follows, for the same reason.
+    """
+    post = _load_live_post(session, raw_id)
+
+    row = PostComment(post_id=post.id, author_id=principal.id, body=payload.body)
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    return CommentRead(
+        id=row.id,
+        post_id=row.post_id,
+        body=row.body,
+        created_at=row.created_at,
+        # `is_self=True` without a comparison: the author *is* the principal, and
+        # spelling that out means the reader cannot be tricked into rendering
+        # somebody else's name on their own comment.
+        author=_author_out(principal, session, True),
+    )
+
+
+def delete_comment(
+    session: Session, principal: User, raw_id: str, raw_comment_id: str
+) -> None:
+    """``DELETE /posts/{id}/comments/{comment_id}`` — author only, soft delete.
+
+    **404 for someone else's comment, not 403**, for the reason ``_assert_owner``
+    gives: a 403 confirms the comment exists, which turns the route into an oracle
+    for probing ids. The comment is also scoped to ``post_id`` in the query, so a
+    valid comment id under a different post is simply not found.
+
+    **Soft delete rather than removing the row.** §9.3 promises that a published
+    post's position and *its comments* survive, and a moderation trail needs the
+    same property. The tombstone is filtered out of every read, so a reader cannot
+    tell it ever existed — but the row, and who wrote it, remain for review.
+
+    **Re-deleting answers 404** rather than an idempotent 204, matching
+    ``delete_post``: this is not a keyed retry, and reporting a deletion that did
+    not happen would be a lie.
+    """
+    post = _load_live_post(session, raw_id)
+
+    comment_id = parse_id(raw_comment_id, "comment")
+    comment = session.scalar(
+        select(PostComment).where(
+            PostComment.id == comment_id,
+            PostComment.post_id == post.id,
+            PostComment.deleted_at.is_(None),
+        )
+    )
+    if comment is None or comment.author_id != principal.id:
+        raise ApiError(
+            status.HTTP_404_NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            "That comment was not found.",
+        )
+
+    comment.deleted_at = datetime.now(UTC)
+    session.commit()

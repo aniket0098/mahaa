@@ -234,7 +234,7 @@ async def upload_document(
 @router.get(
     "/media/{media_id}",
     response_class=Response,
-    summary="Download the bytes (uploader only)",
+    summary="Download the bytes (owner, or any member once published)",
     responses={
         200: {
             "content": {"application/octet-stream": {}},
@@ -243,11 +243,21 @@ async def upload_document(
     },
 )
 def get_media(media_id: str, current_user: CurrentUser, session: DbSession) -> Response:
-    """§11.5: bytes, and **only to the uploader**.
+    """Bytes, to the owner and to any member once a visible row publishes them.
 
     This is why `authenticatedImageSource()` in the client attaches the bearer
     token to every `expo-image`: an image in a post card cannot be a plain public
     URL. There is deliberately no unsigned variant of this route.
+
+    **The audience widened in Phase 12, and only for referenced assets.** §11.5
+    said "bytes only to the uploader", which made the feed impossible: the post
+    itself is a member-visible read, so any member could see that a post existed
+    and then got a 404 for every picture and video in it — and the author's
+    avatar 404'd too, so a card header showed initials instead of a face. An
+    asset is now readable by any authenticated member once a **live post**, an
+    **active story**, or somebody's **avatar** references it; anything else, and
+    every `document`, stays owner-only. `services.media._is_member_readable`
+    owns that rule and `serve` applies it.
 
     A 404 covers both "no such asset" and "not yours", so the route cannot be
     used to confirm that an arbitrary id exists (§16).

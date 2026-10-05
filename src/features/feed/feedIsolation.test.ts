@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { mergeFeed } from '@/features/feed/feedModel';
+import { mergeFeed, type FeedPost } from '@/features/feed/feedModel';
 
 const FEED_DIR = fileURLToPath(new URL('.', import.meta.url));
 const read = (name: string) => readFileSync(`${FEED_DIR}${name}`, 'utf8');
@@ -92,8 +92,34 @@ describe('the profile mapper is kept, but is not a feed source', () => {
 });
 
 describe('merging published posts invents nothing', () => {
-  const post = (id: string) =>
-    ({ id, origin: 'profile', kind: 'text', category: 'community' }) as never;
+  const author = {
+    name: 'Ada Lovelace',
+    // Real identity fields, which the feed model now carries for every post.
+    username: 'ada',
+    publicId: 'pub_ada',
+    headline: null,
+    avatarUrl: null,
+    profileHref: '/profile',
+    verified: false,
+  };
+  const post = (id: string, overrides: Partial<FeedPost> = {}): FeedPost =>
+    ({
+      id,
+      kind: 'text',
+      category: 'community',
+      origin: 'profile',
+      title: null,
+      body: null,
+      media: [],
+      project: null,
+      achievement: null,
+      tags: [],
+      createdAt: '2026-03-01T00:00:00Z',
+      // Zeros, because the server is the only source of a real count.
+      engagement: { likeCount: 0, commentCount: 0, likedByMe: false },
+      author,
+      ...overrides,
+    }) as FeedPost;
 
   it('passes every published post through untouched', () => {
     const real = [post('a'), post('b'), post('c')];

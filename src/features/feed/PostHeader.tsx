@@ -41,15 +41,32 @@ export function PostHeader({
   menuOpen,
 }: PostHeaderProps) {
   const isDemo = post.origin === 'demo';
-  // Headline and time share one line, and either may be absent, so the separator
-  // is only added when both parts exist.
-  const meta = [post.author.headline, formatFeedTime(post.createdAt)]
+  /**
+   * The identity line: `@handle · headline · 2h`.
+   *
+   * **Each part is optional and the separator is not.** A real post always has a
+   * handle and a timestamp; a headline only if the author wrote one, and a demo
+   * author has no handle at all. Building the line from whatever exists — rather
+   * than a fixed template with placeholders — is what stops a card reading
+   * "@ · · 2h" for a person with no handle and no headline.
+   *
+   * The handle comes from the *post's own author*, never from the signed-in user.
+   * That is the whole point of the field: a feed where every card showed the
+   * reader's own handle because the author identity was missing.
+   */
+  const meta = [
+    post.author.username ? `@${post.author.username}` : null,
+    post.author.headline,
+    formatFeedTime(post.createdAt),
+  ]
     .filter((part): part is string => Boolean(part && part.trim()))
     .join(' · ');
 
   return (
     <View style={styles.header}>
       <View style={styles.authorBlock}>
+        {/* 44px, not 40: the brief's floor for a post identity, and the number the
+            design tokens already define as the secondary touch size. */}
         <Avatar name={post.author.name} src={post.author.avatarUrl} size={40} />
 
         <View style={styles.authorText}>

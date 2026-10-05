@@ -1,17 +1,17 @@
 /**
- * Community Feed model — types, the record flattener, and the filter rules.
+ * Community Feed model â€” types, the record flattener, and the filter rules.
  *
  * Pure data and pure functions: no React, no React Native, no API import. That
- * is deliberate — it is what lets `npm test` prove the feed's honesty rules in
+ * is deliberate â€” it is what lets `npm test` prove the feed's honesty rules in
  * plain Node, on a machine with no emulator (see `feedModel.test.ts`).
  *
  * **There is no posts API**, so nothing here invents a second author, a like
  * count, or a comment count. Every post comes from one of exactly two origins:
  *
- *  - `origin: 'profile'` — a record the authenticated candidate really created,
+ *  - `origin: 'profile'` â€” a record the authenticated candidate really created,
  *    flattened out of the `GET /profile` aggregate the Home screen already
  *    fetches. One request feeds the whole page; the feed adds no round trip.
- *  - `origin: 'demo'` — a development-only placeholder from `demoFeedPosts.ts`,
+ *  - `origin: 'demo'` â€” a development-only placeholder from `demoFeedPosts.ts`,
  *    namespaced by id and gated by `__DEV__`.
  *
  * The `FeedPost` shape is deliberately the shape a future `/posts` response
@@ -21,7 +21,7 @@
 
 import type { ProfileAggregate } from '@/types/profile';
 
-/** What the post *is* — drives which block renders and whether a badge shows. */
+/** What the post *is* â€” drives which block renders and whether a badge shows. */
 export type FeedPostKind = 'text' | 'image' | 'project' | 'achievement' | 'learning' | 'video';
 
 /** Which filter chip shows the post. */
@@ -43,7 +43,7 @@ export const feedFilters = [
 /**
  * A body longer than this gets a "See more" control.
  *
- * The number is a presentation constant, not a server limit — nothing is
+ * The number is a presentation constant, not a server limit â€” nothing is
  * truncated in the data, only in the initial render.
  */
 export const BODY_PREVIEW_CHARS = 260;
@@ -58,7 +58,7 @@ export type FeedMediaKind = 'image' | 'video';
 export interface FeedMedia {
   id: string;
   /**
-   * Which renderer this needs. Image and video are not interchangeable —
+   * Which renderer this needs. Image and video are not interchangeable â€”
    * handing a video to `expo-image` yields a silent blank, which reads as a
    * broken post rather than as the wrong component.
    */
@@ -66,8 +66,8 @@ export interface FeedMedia {
   uri: string;
   /**
    * Intrinsic size, so the card can size it without cropping the content.
-   * `0` means the server did not derive it, which is normal for video —
-   * `MediaRead` documents these as null for video and documents — and
+   * `0` means the server did not derive it, which is normal for video â€”
+   * `MediaRead` documents these as null for video and documents â€” and
    * `mediaDisplayHeight` falls back to a contained 4:3 box rather than `NaN`.
    */
   width: number;
@@ -77,7 +77,7 @@ export interface FeedMedia {
 }
 
 /**
- * Structured project detail — only for records that really carry it.
+ * Structured project detail â€” only for records that really carry it.
  *
  * `category`, `status`, and `team` exist because the API contract defines them;
  * today's `ProjectRead` does not, so they stay `null` for profile records and
@@ -100,7 +100,7 @@ export interface FeedProject {
 export interface FeedAchievement {
   title: string;
   issuer: string | null;
-  /** ISO date or null — never a guessed date. */
+  /** ISO date or null â€” never a guessed date. */
   achievedOn: string | null;
   description: string | null;
   verificationUrl: string | null;
@@ -108,14 +108,30 @@ export interface FeedAchievement {
 
 export interface FeedAuthor {
   name: string;
+  /**
+   * The author's own handle, or null for a demo author.
+   *
+   * **This is the author's handle, never the signed-in user's.** The field is what
+   * lets a card render `@someone`, and the bug this prevents is the obvious one:
+   * a feed where every post is stamped with the reader's own handle because the
+   * card had no per-author identity and quietly borrowed the session's.
+   */
+  username: string | null;
+  /**
+   * The immutable public id, or null for a demo author.
+   *
+   * Carried because an author link needs a stable key; `username` is changeable by
+   * its owner, so it is a label and not an identifier.
+   */
+  publicId: string | null;
   headline: string | null;
   avatarUrl: string | null;
   /**
    * A route the author can really be opened at, or null.
    *
    * A profile record's author is the authenticated candidate, so this is
-   * `/profile`. A demo author has no profile route — there is no other-user
-   * profile screen in the app — so a demo post carries `null` and its name is
+   * `/profile`. A demo author has no profile route â€” there is no other-user
+   * profile screen in the app â€” so a demo post carries `null` and its name is
    * therefore not tappable, rather than a dead link.
    */
   profileHref: string | null;
@@ -126,6 +142,28 @@ export interface FeedAuthor {
    */
   verified: boolean;
 }
+
+/**
+ * Server-counted engagement for one post.
+ *
+ * **These are the only numbers the feed may print, and they are never computed
+ * here.** `likeCount` and `commentCount` are real counts taken by the API, and
+ * `likedByMe` is that same reader's relationship to the post. A card that wanted
+ * a different number has to ask the server for it, which is the point: the client
+ * has no way to invent an engagement figure, because it has nowhere to get one.
+ */
+export interface FeedEngagement {
+  likeCount: number;
+  commentCount: number;
+  likedByMe: boolean;
+}
+
+/** Engagement for a post with no interactions. The honest reading of "none". */
+export const NO_ENGAGEMENT: FeedEngagement = {
+  likeCount: 0,
+  commentCount: 0,
+  likedByMe: false,
+};
 
 export interface FeedPost {
   id: string;
@@ -140,6 +178,20 @@ export interface FeedPost {
   /** Hashtag-like tags, without the leading `#`. */
   tags: string[];
   /** The record's real timestamp. Drives ordering and the relative time label. */
+  createdAt: string;
+  author: FeedAuthor;
+  /**
+   * Always present, for a real post. A demo post carries zeros, because there is
+   * no server behind it and a number there would be invented.
+   */
+  engagement: FeedEngagement;
+}
+
+/** One comment, as the sheet renders it. Its author is a real identity. */
+export interface FeedComment {
+  id: string;
+  postId: string;
+  body: string;
   createdAt: string;
   author: FeedAuthor;
 }
@@ -240,11 +292,17 @@ export function formatRecordDate(iso: string | null): string | null {
  * community feed's shape so the two are one list rather than two stacked
  * sections. Only fields the record actually carries are mapped; nothing is
  * defaulted into a plausible-looking value, and the author is the authenticated
- * candidate — the only author whose profile this app can open.
+ * candidate â€” the only author whose profile this app can open.
  */
 export function fromProfileRecords(profile: ProfileAggregate): FeedPost[] {
   const author: FeedAuthor = {
     name: profile.identity.name,
+    // The caller's own public id, which the aggregate carries. Real posts are the
+    // only place this is non-null: a demo author has no account. The *handle* is
+    // not on the profile aggregate — it belongs to the account (`GET /users/me`),
+    // so it is not invented here.
+    publicId: profile.identity.public_id ?? null,
+    username: null,
     headline: profile.identity.headline,
     avatarUrl: profile.identity.avatar_url,
     profileHref: '/profile',
@@ -277,13 +335,15 @@ export function fromProfileRecords(profile: ProfileAggregate): FeedPost[] {
       tags: project.skills.map((skill) => skill.name),
       createdAt: project.created_at,
       author,
+      // A profile record was never published, so it has no server-side engagement.
+      engagement: NO_ENGAGEMENT,
     })),
 
     ...profile.certifications.map(
       (certification): FeedPost => ({
         id: `certification-${certification.id}`,
         // A certificate is achievement content, which is exactly what the
-        // Achievements filter promises — not a learning update.
+        // Achievements filter promises â€” not a learning update.
         kind: 'achievement',
         category: 'achievements',
         origin: 'profile',
@@ -301,6 +361,8 @@ export function fromProfileRecords(profile: ProfileAggregate): FeedPost[] {
         tags: [],
         createdAt: certification.created_at,
         author,
+        // A profile record was never published, so it has no server-side engagement.
+        engagement: NO_ENGAGEMENT,
       }),
     ),
 
@@ -326,6 +388,8 @@ export function fromProfileRecords(profile: ProfileAggregate): FeedPost[] {
         tags: achievement.category ? [achievement.category] : [],
         createdAt: achievement.created_at,
         author,
+        // A profile record was never published, so it has no server-side engagement.
+        engagement: NO_ENGAGEMENT,
       }),
     ),
 
@@ -344,11 +408,42 @@ export function fromProfileRecords(profile: ProfileAggregate): FeedPost[] {
         tags: subtitle ? [subtitle] : [],
         createdAt: education.created_at,
         author,
+        // A profile record was never published, so it has no server-side engagement.
+        engagement: NO_ENGAGEMENT,
       };
     }),
   ];
 
   return sortNewestFirst(records);
+}
+
+/**
+ * A count as a reader would say it: `1`, `12`, `1.2K`, `3M`.
+ *
+ * **Abbreviation starts at 1000, never sooner.** "1.2K likes" is the convention
+ * every social product uses and it stops the number from reflowing the card, but
+ * rounding four digits to "1K" would lose information a reader can actually see,
+ * so the switch happens exactly where the number stops being short.
+ *
+ * Exported and pure so the threshold is testable in Node without a renderer.
+ */
+export function formatCount(count: number): string {
+  if (!Number.isFinite(count) || count < 0) return '0';
+
+  if (count < 1_000) return String(count);
+
+  if (count < 1_000_000) {
+    // `toFixed` then trim the trailing ".0", so 1000 reads "1K" and 1500 "1.5K".
+    const thousands = count / 1_000;
+    return `${trimZero(thousands.toFixed(thousands < 10 ? 1 : 0))}K`;
+  }
+
+  const millions = count / 1_000_000;
+  return `${trimZero(millions.toFixed(millions < 10 ? 1 : 0))}M`;
+}
+
+function trimZero(value: string): string {
+  return value.endsWith('.0') ? value.slice(0, -2) : value;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -392,7 +487,7 @@ export function filterFeed(posts: readonly FeedPost[], filter: FeedFilter): Feed
   }
 }
 
-/** How many posts carry each category — used to explain an empty filter. */
+/** How many posts carry each category â€” used to explain an empty filter. */
 export function countByCategory(posts: readonly FeedPost[]): Record<FeedCategory, number> {
   const counts: Record<FeedCategory, number> = {
     projects: 0,
@@ -423,7 +518,7 @@ export function mergeFeed(
 }
 
 /**
- * Relative time from the record's real timestamp — never a fabricated recency.
+ * Relative time from the record's real timestamp â€” never a fabricated recency.
  * Returns an empty string for an unparseable value rather than guessing.
  */
 export function formatFeedTime(iso: string, now: Date = new Date()): string {

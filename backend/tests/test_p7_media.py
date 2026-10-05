@@ -625,8 +625,16 @@ def test_the_binary_response_is_not_a_json_wrapper(api_client, candidate) -> Non
     assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_a_stranger_cannot_read_the_bytes(api_client, stranger, candidate) -> None:
-    """?11.5: "serves bytes only to the uploader"."""
+def test_a_stranger_cannot_read_an_unreferenced_upload(
+    api_client, stranger, candidate
+) -> None:
+    """An upload nobody has published is still the uploader alone.
+
+    §11.5 said "serves bytes only to the uploader", and Phase 12 narrowed that to
+    "only the uploader, *or* anybody once a visible row references it". Nothing
+    references this asset, so the original rule is the one that applies — which
+    is what keeps the media table from becoming a public bucket of loose files.
+    """
 
     media_id = _seed_asset(api_client, candidate)["id"]
 
@@ -690,6 +698,168 @@ def test_served_at_is_not_a_timestamp(api_client, candidate) -> None:
     row = _row(api_client, _seed_asset(api_client, candidate)["id"])
     assert "/" in row.served_at
     assert not row.served_at[0].isdigit()
+
+# --- Phase 12: reading media a visible row publishes ------------------------
+
+
+def _publish_post(api_client, author, media_ids, body="a post"):
+    """Create a real post through the real route, so the reference is real."""
+
+    response = api_client.post(
+        "/api/v1/posts",
+        json={
+            "kind": "image",
+            "category": "community",
+            "body": body,
+            "media_ids": list(media_ids),
+        },
+        headers=author.headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_another_member_can_read_an_image_attached_to_a_post(
+    api_client, candidate, stranger
+) -> None:
+    """The regression this phase exists for.
+
+    `GET /posts` is a member-visible read, so a stranger could always *see* that
+    this post existed — and then got a 404 for the picture inside it. A feed whose
+    pictures only their author can see is not a feed.
+    """
+
+    media_id = _seed_asset(api_client, candidate)["id"]
+    _publish_post(api_client, candidate, [media_id])
+
+    response = _fetch(api_client, stranger, media_id)
+
+    assert response.status_code == 200, response.text
+    assert response.content == PNG
+
+
+def test_another_member_can_read_a_video_attached_to_a_post(
+    api_client, candidate, stranger
+) -> None:
+    video = mp4_bytes()
+    media_id = _seed_asset(
+        api_client, candidate, video, mime="video/mp4", kind="video"
+    )["id"]
+    _publish_post(api_client, candidate, [media_id])
+
+    response = _fetch(api_client, stranger, media_id)
+
+    assert response.status_code == 200, response.text
+    assert response.content == video
+
+
+def test_another_member_can_read_a_storys_artwork(
+    api_client, candidate, stranger
+) -> None:
+    """§10.1 gives stories no per-viewer ACL either."""
+
+    media_id = _seed_asset(api_client, candidate)["id"]
+    published = api_client.post(
+        "/api/v1/stories",
+        json={
+            "content_type": "announcement",
+            "caption": "an announcement",
+            "media_id": media_id,
+        },
+        headers=candidate.headers,
+    )
+    assert published.status_code == 201, published.text
+
+    assert _fetch(api_client, stranger, media_id).status_code == 200
+
+
+def test_another_member_can_read_somebodys_avatar(
+    api_client, candidate, stranger
+) -> None:
+    """Otherwise every card header shows initials instead of a face.
+
+    `PUT /users/me/photo?kind=image` uploads the bytes *and* points
+    `users.avatar_media_id` at them in one call, so the id the test reads back is
+    the one the reference check will look for.
+    """
+
+    response = api_client.put(
+        "/api/v1/users/me/photo?kind=image",
+        content=PNG,
+        headers={**candidate.headers, "Content-Type": "image/png"},
+    )
+    assert response.status_code in (200, 201), response.text
+    media_id = response.json()["id"]
+    assert media_id
+
+    assert _fetch(api_client, stranger, media_id).status_code == 200
+    # ...and a member can read it exactly once per request rather than the URL
+    # being guessable: an id nobody was ever shown still 404s for a stranger.
+    orphan = _seed_asset(api_client, candidate)["id"]
+    assert _fetch(api_client, stranger, orphan).status_code == 404
+
+
+def test_the_reference_check_survives_the_post_being_deleted(
+    api_client, candidate, stranger
+) -> None:
+    """A tombstoned post leaves every read, so its image stops being readable.
+
+    The predicate is the feed's own (``deleted_at IS NULL``). Sharing it is the
+    point: if the two ever disagreed, a deleted post's picture would outlive it.
+    """
+
+    media_id = _seed_asset(api_client, candidate)["id"]
+    post = _publish_post(api_client, candidate, [media_id])
+    assert _fetch(api_client, stranger, media_id).status_code == 200
+
+    removed = api_client.delete(
+        f"/api/v1/posts/{post['id']}", headers=candidate.headers
+    )
+    assert removed.status_code == 204, removed.text
+
+    assert _fetch(api_client, stranger, media_id).status_code == 404
+
+
+def test_a_document_is_never_readable_by_another_member(
+    api_client, candidate, stranger
+) -> None:
+    """A PDF is a private resume or certificate, whatever else points at it.
+
+    `POSTABLE_KINDS` is `{image, video}`, so no post can reference one — but the
+    rule is checked on *kind* rather than inferred from the absence of a
+    reference, so a future attachment surface cannot widen it by accident.
+    """
+
+    media_id = _seed_asset(
+        api_client, candidate, pdf_bytes(), mime="application/pdf", kind="document"
+    )["id"]
+
+    assert _fetch(api_client, stranger, media_id).status_code == 404
+    # ...and the owner still can, because the widening never took anything away.
+    assert _fetch(api_client, candidate, media_id).status_code == 200
+
+
+def test_an_unauthenticated_caller_cannot_read_any_media(api_client, candidate) -> None:
+    """Publishing widens the audience to members, never to anonymous callers."""
+
+    media_id = _seed_asset(api_client, candidate)["id"]
+    _publish_post(api_client, candidate, [media_id])
+
+    anonymous = api_client.get(f"/api/v1/media/{media_id}")
+    assert anonymous.status_code == 401, anonymous.text
+
+
+def test_a_deleted_post_still_blocks_its_own_author_from_nothing(
+    api_client, candidate
+) -> None:
+    """Deleting a post must not lock its author out of their own upload."""
+
+    media_id = _seed_asset(api_client, candidate)["id"]
+    post = _publish_post(api_client, candidate, [media_id])
+    api_client.delete(f"/api/v1/posts/{post['id']}", headers=candidate.headers)
+
+    assert _fetch(api_client, candidate, media_id).status_code == 200
+
 
 # --- limits: ?11.4 -----------------------------------------------------------
 

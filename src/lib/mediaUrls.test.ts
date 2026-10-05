@@ -82,9 +82,12 @@ describe('one rule, reached through every media surface', () => {
     // the two could drift apart unnoticed.
     const post = readFileSync(fileURLToPath(new URL('../api/posts.ts', import.meta.url)), 'utf8');
     expect(post).toContain('uri: absoluteMediaUri(item.uri),');
-    expect(post).toContain(
-      'avatarUrl: wire.author.avatar_url ? absoluteMediaUri(wire.author.avatar_url) : null',
-    );
+    // The avatar now lives in the shared `mapAuthor`, which posts *and* comments
+    // both use. Asserting the helper rather than one call site is what keeps a
+    // third surface from re-deriving the rule — and it is the reason the helper
+    // exists at all.
+    expect(post).toContain('avatarUrl: wire.avatar_url ? absoluteMediaUri(wire.avatar_url) : null');
+    expect(post).toMatch(/function mapAuthor\(/);
   });
 
   it('Test E: video playback builds its request from the same function', () => {
@@ -107,5 +110,98 @@ describe('one rule, reached through every media surface', () => {
     );
     expect(card).toContain('absoluteMediaUri(avatarUrl)');
     expect(card).not.toMatch(/apiBaseUrl/);
+  });
+});
+
+/**
+ * The empty-headers regression.
+ *
+ * **Found by the live two-user browser run, not by reasoning.** User A published
+ * an image post; it arrived in User B's Home in real time with the right author
+ * and the right caption, and rendered as an empty grey box. The bytes were
+ * reachable — the same session fetched them with a bearer attached and got
+ * `200 image/png, 96146 bytes` — and `expo-image` had issued no request at all.
+ *
+ * The cause is a one-character difference that no unit test could have called a
+ * bug by inspection: `headers: {}` versus no `headers` key. `expo-image`'s web
+ * `useHeaders` branches on truthiness, and `{}` is truthy, so an unauthenticated
+ * source was treated as an authenticated one, the fetch it attempted was refused,
+ * and the component rendered `null` — permanently, with no `onError` the card
+ * could show.
+ *
+ * `media.ts` cannot be imported here (it reaches `expo-file-system` and therefore
+ * `react-native`, whose Flow entry point a Node runner cannot parse), so the
+ * source is read and its shape asserted. That is the same trade
+ * {@link fileURLToPath} is used for above, and it is worth it: the alternative is
+ * no coverage at all for a defect that shipped.
+ */
+describe('authenticatedImageSource: an empty headers object is a real defect', () => {
+  const media = readFileSync(fileURLToPath(new URL('../api/media.ts', import.meta.url)), 'utf8');
+
+  /**
+   * The file's executable code, with block and line comments removed.
+   *
+   * Comments are stripped because this file's own doc comment quotes the buggy
+   * `headers: {}` in order to explain why it must never come back — so a naive
+   * text search matches the explanation and fails forever. The property being
+   * tested is about what the module *does*, not about what it says it used to do.
+   */
+  const code = media
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*\/\/.*$/gm, '');
+
+  it('does not return an empty headers object', () => {
+    // The precise shape this bug was. `headers: {}` must not come back.
+    expect(code).not.toMatch(/headers:\s*\{\s*\}/);
+    expect(code).not.toMatch(/\?\{\s*Authorization:[^}]*\}\s*:\s*\{\s*\}/);
+  });
+
+  it('omits headers when no token is cached, rather than sending an empty set', () => {
+    // The two shapes that must exist: a real header, or no key at all.
+    expect(code).toContain(': { uri };');
+    expect(code).toMatch(/headers\?:/);
+  });
+
+  it('every expo-image in the app goes through this one function', () => {
+    // A surface that built its own source would reintroduce the empty object.
+    for (const surface of [
+      '../features/feed/PostMedia.tsx',
+      '../features/feed/MediaViewer.tsx',
+      '../components/ui/Avatar.tsx',
+      '../features/onboarding/PhotoStep.tsx',
+    ]) {
+      const source = readFileSync(fileURLToPath(new URL(surface, import.meta.url)), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^[ \t]*\/\/.*$/gm, '');
+      expect(source, surface).toContain('authenticatedImageSource(');
+      expect(source, surface).not.toMatch(/headers:\s*\{\s*\}/);
+    }
+  });
+
+  /**
+   * The second half of the same defect.
+   *
+   * Omitting the empty object stops `expo-image` from hanging, but on its own it
+   * is not enough: the source is built during a synchronous render while the token
+   * is mirrored into memory asynchronously, so the first render still produces a
+   * headerless source. Without something telling React to rebuild it when the
+   * token lands, the image stays blank and now fails *silently* instead of
+   * loudly. The live run had both halves — the empty frame, and a session that
+   * could fetch the very same bytes with a header attached.
+   */
+  it('the token cache notifies, so surfaces rebuild their source when it lands', () => {
+    expect(code).toMatch(/export function subscribeMediaAuth\(/);
+    expect(code).toMatch(/export function getMediaAuthVersion\(/);
+    // Both mutators must notify, or a sign-out would leave stale media readable.
+    expect(code).toMatch(/primeMediaAuth[\s\S]*?notifyMediaAuthChanged\(\)/);
+    expect(code).toMatch(/clearMediaAuth[\s\S]*?notifyMediaAuthChanged\(\)/);
+  });
+
+  it('the surfaces that read private bytes subscribe to that store', () => {
+    for (const surface of ['../features/feed/PostMedia.tsx', '../components/ui/Avatar.tsx']) {
+      const source = readFileSync(fileURLToPath(new URL(surface, import.meta.url)), 'utf8');
+      expect(source, surface).toContain('useSyncExternalStore(subscribeMediaAuth');
+      expect(source, surface).toContain('getMediaAuthVersion');
+    }
   });
 });

@@ -357,7 +357,9 @@ def conversation_reads(
                     else None
                 ),
                 last_message=message_read(last, session) if last is not None else None,
-                members=[_summary(m.user, session) for m in _sorted_members(conversation)],
+                members=[
+                    _summary(m.user, session) for m in _sorted_members(conversation)
+                ],
                 unread_count=counts.get(conversation.id, 0),
                 muted=member.muted,
                 archived=member.archived,

@@ -39,6 +39,24 @@ export const queryKeys = {
   /** The Community Feed. Invalidated after a publish so a new post appears. */
   posts: ['posts'] as const,
   /**
+   * One post's comments.
+   *
+   * **Nested under `posts`, not under a new `comments` root.** A comment belongs
+   * to its post: invalidating `posts` (which happens after a publish) is exactly
+   * the right time to re-read them, and `['posts', postId, 'comments']` says so in
+   * the key rather than leaving it to convention.
+   *
+   * These exist because the endpoints exist. There is deliberately still no
+   * `bookmarks` key: saving is session-scoped device state with no server route.
+   */
+  postComments: (postId: string) => ['posts', postId, 'comments'] as const,
+  /**
+   * A bare `['posts']` invalidation covers every comment list, because React Query
+   * matches a filter against the *leading* segments of a key. `postComments()` is a
+   * function, so it cannot itself be passed as a prefix.
+   */
+  postsRoot: ['posts'] as const,
+  /**
    * The caller's own published posts (`GET /posts/mine`). Nested under `posts`
    * so a publish invalidates the count and the list together.
    */
