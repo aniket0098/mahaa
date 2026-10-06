@@ -17,23 +17,20 @@
 
 services:
   - type: web
-    name: mahaa-backend
-    runtime: python
+    name: mahaa-backend-docker
+    runtime: docker
     region: singapore
     # A scaffold, not a production plan. The free web service spins down when
     # idle, loses local files on redeploy, and restarts at Render's discretion.
     plan: free
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    # Render injects $PORT. `--host 0.0.0.0` is required: binding to loopback
-    # makes the service unreachable from outside the container.
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: Dockerfile
     # Liveness, not readiness: the health path must not depend on the database,
     # or a slow database would restart a healthy process in a loop.
     healthCheckPath: /api/v1/health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.8"
+      - key: PORT
+        value: "8000"
 
       # `production` enables the fail-closed checks in app/core/config.py: the
       # service refuses to start on a placeholder DATABASE_URL, on DEBUG=true,

@@ -1,0 +1,61 @@
+# =============================================================================
+# Mahaa backend — Docker build context exclusions.
+#
+# The rule: the build context must never carry a real secret, a virtualenv, a
+# local cache or a development-only tree into the image. Everything below is
+# excluded on purpose; `app/`, `alembic/`, `alembic.ini`, `requirements.txt` and
+# `pyproject.toml` are deliberately NOT listed, so the runtime image can import
+# the application and run migrations.
+# =============================================================================
+
+# --- secrets -----------------------------------------------------------------
+# A real `.env` must never be baked into a layer: it would be readable from the
+# image by anyone who can pull it, and it stays in history forever.
+.env
+.env.*
+*.env
+
+# `.env.*` above also matches the committed template. That file is a safe set of
+# placeholders with no real credential in it, so it is kept in the context on
+# purpose: negation applies last, so this rule wins over the exclusions above.
+!.env.example
+
+# --- virtual environments ----------------------------------------------------
+# A Windows/macOS `.venv` is unusable inside a Linux image and is hundreds of MB.
+.venv/
+venv/
+
+# --- python bytecode and tooling caches --------------------------------------
+__pycache__/
+*.py[cod]
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- development-only trees --------------------------------------------------
+# The suite and the tooling scripts are not runtime dependencies. The Dockerfile
+# copies named paths anyway, so these are belt-and-braces against a future
+# `COPY . .`.
+tests/
+tools/
+
+# --- local database artefacts and logs ---------------------------------------
+# A local scratch database or a pg_dump must never ride along into a layer.
+*.db
+*.sqlite
+*.sqlite3
+
+*.dump
+*.log
+
+# --- version control and editor cruft ----------------------------------------
+.git/
+.gitignore
+
+# --- frontend / node artefacts (not used by the API image) -------------------
+node_modules/
+dist/
+build/
