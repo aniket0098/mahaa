@@ -130,17 +130,18 @@ export function PostMedia({ media, onOpen, postId, top }: PostMediaProps) {
                         </AppText>
                       </View>
                     ) : item.kind === "video" ? (
-                      // A video needs a stable id and a measured position so the
-                      // feed coordinator can decide whether this is the one video
-                      // allowed to play. A post with no id falls back to the media
-                      // id, which is unique within the post, so the slot is never
-                      // shared by two cards.
+                      // A video needs a stable id, a measured position, and to be
+                      // the page actually on screen: the feed coordinator decides
+                      // whether this is the one video allowed to play, and a page
+                      // the reader has paged past must not hold the slot — two
+                      // pages of one post would otherwise both play at once.
                       <PostVideo
                         uri={item.uri}
                         alt={item.alt}
                         height={bandHeight}
                         postId={postId ?? item.id}
                         top={top ?? 0}
+                        current={page === index}
                       />
                     ) : (
                       <Image

@@ -1,7 +1,7 @@
 /**
  * Profile header photo-edit coverage.
  *
- * **Structural, for the same reason `homeComposer.test.ts` is.** `ProfileHeader`
+ * **Structural, for the same reason `homeCreatePost.test.ts` is.** `ProfileHeader`
  * imports `react-native`, so it cannot be rendered by this Node-only runner. The
  * guarantees worth protecting here are about *wiring* — and each one is something
  * a later edit could break while the screen still looked right at a glance:

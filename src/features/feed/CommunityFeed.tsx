@@ -43,6 +43,15 @@ import type { FeedFilter } from '@/features/feed/feedModel';
 import { useFeedPosts } from '@/features/feed/useFeedPosts';
 
 export interface CommunityFeedProps {
+  /**
+   * Content-relative y of Home's wrapper around this section.
+   *
+   * The wrapper sits between the ScrollView and the feed, so this section's own
+   * `onLayout` y is measured from the wrapper — it must be added back to put
+   * every card position in the same coordinates the playback coordinator's
+   * `contentOffset` viewport uses.
+   */
+  originOffset?: number;
   /** Status of the page's own profile request, shown while the feed warms up. */
   status: 'loading' | 'error' | 'ready';
   errorMessage?: string | null;
@@ -52,6 +61,7 @@ export interface CommunityFeedProps {
 }
 
 export function CommunityFeed({
+  originOffset = 0,
   status,
   errorMessage,
   onRetry,
@@ -59,6 +69,13 @@ export function CommunityFeed({
   onOpenLink,
 }: CommunityFeedProps) {
   const [filter, setFilter] = useState<FeedFilter>('latest');
+  const [feedY, setFeedY] = useState(0);
+  const [listY, setListY] = useState(0);
+  // The feed's origin inside the scroll content: Home's wrapper offset (which
+  // already spans the header and the Stories row) plus this section's position
+  // inside the wrapper and the list's inside the section. The playback
+  // coordinator's `contentOffset`-based viewport can then compare like with like.
+  const baseOffset = originOffset + feedY + listY;
   const view = useFeedPosts(filter);
 
   // The feed's own `/posts` request decides whether the section is loading or has
@@ -68,7 +85,10 @@ export function CommunityFeed({
   const feedError = view.status === 'error' ? view.errorMessage : errorMessage;
 
   return (
-    <View style={styles.section} testID="community-feed">
+    <View
+      style={styles.section}
+      testID="community-feed"
+      onLayout={({ nativeEvent }) => setFeedY(nativeEvent.layout.y)}>
       <FeedFilterBar filter={filter} onChange={setFilter} />
 
       {feedStatus === 'loading' ? (
@@ -108,11 +128,12 @@ export function CommunityFeed({
           </View>
         </Card>
       ) : (
-        <View style={styles.list}>
+        <View style={styles.list} onLayout={({ nativeEvent }) => setListY(nativeEvent.layout.y)}>
           {view.posts.map((post) => (
             <FeedPostCard
               key={post.id}
               post={post}
+              baseOffset={baseOffset}
               onOpenProfile={onOpenProfile}
               onOpenLink={onOpenLink}
             />

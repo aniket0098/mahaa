@@ -40,6 +40,16 @@ export const styles = StyleSheet.create({
   footnote: { textAlign: 'center' },
   /** The story row is the first thing on the page, so it carries no top margin. */
   storiesSection: { marginTop: 0 },
+  /**
+   * The feed starts almost immediately after the stories row. The page lays
+   * sections out with a uniform `SECTION_GAP` rhythm, which every other section
+   * keeps — so this pulls the feed up by exactly the difference, leaving one
+   * small `spacing.md` rhythm gap and nothing else. No composer card, no
+   * heading, no duplicated spacing; the first post is visible without
+   * scrolling. Computed from the two tokens rather than a literal, so a future
+   * rhythm change keeps the small gap small.
+   */
+  feedPullUp: { marginTop: spacing.md - SECTION_GAP },
   sectionHeader: {
     alignItems: 'baseline',
     flexDirection: 'row',
@@ -97,6 +107,22 @@ export const styles = StyleSheet.create({
     width: '100%',
   },
   createSlot: { alignItems: 'center', height: 14, marginTop: 2 },
+  /** The compact blue Create Post (+) circle that sits beside `Your story`. */
+  createPostCircle: {
+    alignItems: 'center',
+    backgroundColor: colors.colorPrimary,
+    borderRadius: STORY_CIRCLE / 2,
+    height: STORY_CIRCLE,
+    justifyContent: 'center',
+    width: STORY_CIRCLE,
+    ...elevation.sm,
+  },
+  /**
+   * Reserves the label height the story bubbles carry so the bare circle sits on
+   * the same baseline as every other circle in the row. No visible text: the
+   * accessible name carries the meaning.
+   */
+  createPostSpacer: { height: 36 },
 
   /* ------------------------------ header chrome ------------------------------ */
   header: {

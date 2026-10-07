@@ -10,7 +10,7 @@
  * The component rules (tap-to-play, single playback, no eager download) cannot
  * render here — the components import `react-native` and `expo-video`, and this
  * runner is Node. Those are asserted on the source instead, which is the approach
- * `demoIsolation.test.ts` and `homeComposer.test.ts` already use here, and which
+ * `demoIsolation.test.ts` and `homeCreatePost.test.ts` already use here, and which
  * catches the realistic regression: somebody swapping the lazy poster for an
  * eager autoplay, or dropping the single-playback guard.
  *
@@ -338,13 +338,17 @@ describe('playback is lazy and single (source-level)', () => {
   const videoComponent = read('../feed/PostVideo.tsx');
   const postMedia = read('../feed/PostMedia.tsx');
 
-  it('does not autoplay, and downloads only after a tap', () => {
-    // Eagerly downloading every video in a feed would pull the whole set over
-    // the network before the reader chose one.
+  it('starts unloaded and only downloads once it is the active video', () => {
+    // Lazy on purpose: a fling must not pull every video over the network. The
+    // poster keeps a manual path, but autoplay is driven by the coordinator.
     expect(videoComponent).toContain(
       'const [playable, setPlayable] = useState<string | null>(null)',
     );
     expect(videoComponent).toContain('onPress={load}');
+    // When the coordinator activates a slot with no bytes yet, it downloads…
+    expect(videoComponent).toContain('void load()');
+    // …and it registers before it can be chosen, so an unloaded video is reachable.
+    expect(videoComponent).toContain('registerVideo({ id: postId, top, height }');
   });
 
   it('guarantees only one video plays at a time', () => {
@@ -367,8 +371,10 @@ describe('playback is lazy and single (source-level)', () => {
     expect(coordinator).toContain('let best: VideoSlot | null = null;');
   });
 
-  it('starts muted, so nothing can make noise unasked', () => {
-    expect(videoComponent).toContain('created.muted = true');
+  it('plays with sound on native and starts muted on the web', () => {
+    // Native players may autoplay with audio in the foreground; browsers refuse
+    // unmuted autoplay outright, so only the browser build is muted.
+    expect(videoComponent).toContain("created.muted = Platform.OS === 'web'");
   });
 
   it('routes a video to the player and never to the image viewer', () => {

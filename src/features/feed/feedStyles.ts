@@ -22,7 +22,13 @@ export const ACTION_HEIGHT = 44;
 
 export const styles = StyleSheet.create({
   /* --------------------------------- section -------------------------------- */
-  section: { gap: spacing.md, marginTop: spacing.sm },
+  /**
+   * The feed starts immediately after the stories row: no top margin of its
+   * own, so the only gap is the page's small section rhythm — no composer
+   * card, no heading, no duplicated spacing. Kept tight on purpose so the
+   * first post is visible without scrolling.
+   */
+  section: { gap: spacing.md, marginTop: 0 },
 
   /* --------------------------------- filters -------------------------------- */
   filterRow: { flexDirection: 'row', gap: spacing.xs, paddingVertical: spacing.xs },

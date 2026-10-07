@@ -91,6 +91,12 @@ def find_users(session: Session, viewer: User, query: str) -> list[UserSummary]:
     endpoint exists for: somebody pastes ``MJ-A1B2C3D4`` and expects *that person*
     first, not a list of strangers who happen to share a surname. Ties inside each
     group break on ``name`` then ``id``, so two identical requests cannot reshuffle.
+    The name tiebreak is ``COLLATE "C"`` — byte order — rather than whatever
+    collation the database happens to have: the same three rows came back in two
+    different orders under a Windows ``English_United States.1252`` database and
+    Docker's ``en_US.utf8`` one, which made the result order a property of the
+    host instead of the product. ``C`` ships with every PostgreSQL, so the order
+    is the same here, in Docker and on Neon.
     """
 
     term = query.strip()
@@ -127,7 +133,10 @@ def find_users(session: Session, viewer: User, query: str) -> list[UserSummary]:
         )
         .order_by(
             case((exact_handle, 0), else_=1),
-            User.name,
+            # Byte order via `COLLATE "C"` rather than the database's own
+            # collation: the order of results must not change with where the
+            # query runs. See the docstring.
+            User.name.collate("C"),
             User.id,
         )
         .limit(LOOKUP_RESULT_MAX)

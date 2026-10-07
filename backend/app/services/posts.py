@@ -42,6 +42,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.errors import ApiError, ErrorCode, error_detail
+from app.core.wire import wire_datetime
 from app.models.enums import MediaKind, PostCategory
 from app.models.media import MediaAsset
 from app.models.posts import Post, PostComment, PostLike, PostMedia
@@ -276,10 +277,12 @@ def create_post(session: Session, principal: User, payload: PostCreate) -> WireP
     # publishing inside the transaction would announce a row a rollback could
     # still erase, which is the one failure no client can reconcile. `created_at`
     # is read after the refresh because it is a server default, not a Python value.
+    # `wire_datetime` renders it with the same serializer the 201 body uses, so
+    # the event and the response cannot drift apart character by character.
     content_events.post_created(
         post_id=str(post.id),
         author_id=str(post.author_id),
-        created_at=post.created_at.isoformat(),
+        created_at=wire_datetime(post.created_at),
     )
 
     return _to_wire(post, principal.id, session)

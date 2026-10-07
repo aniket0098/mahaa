@@ -58,6 +58,13 @@ export type Unregister = () => void;
 let activeId: string | null = null;
 
 /**
+ * True while the feed must stay silent — Home blurred or the app backgrounded.
+ * One switch for every card, kept here so the rule cannot be forgotten by any
+ * single player instance.
+ */
+let suspended = false;
+
+/**
  * Measured slots, by id.
  *
  * **A `Map`, not an array.** Registering and unregistering happens constantly
@@ -131,15 +138,33 @@ export function chooseActive(
   return best;
 }
 
-/** Recomputes which slot should play and applies the change. */
-function reconcile(): void {
+/** Recomputes which slot should play and applies the change.
+ *
+ * `force` re-applies the current winner even when it has not changed — the path
+ * `resumePlayback` takes after a background/foreground or blur/focus cycle, where
+ * the active id is already correct but the player was paused underneath it.
+ */
+function reconcile(force = false): void {
   if (!viewport) return;
+
+  // Suspended (blurred or backgrounded): keep the current slot silent and decide
+  // nothing new until `resumePlayback` re-opens the switch.
+  if (suspended) {
+    if (activeId) {
+      try {
+        targets.get(activeId)?.pause();
+      } catch {
+        // A player released underneath us is not worth failing a scroll over.
+      }
+    }
+    return;
+  }
 
   const nextId = chooseActive([...slots.values()], viewport)?.id ?? null;
 
   // The common case: a scroll frame that does not change the winner costs one
   // comparison and no player calls at all.
-  if (nextId === activeId) return;
+  if (!force && nextId === activeId) return;
 
   const previousId = activeId;
   activeId = nextId;
@@ -224,6 +249,37 @@ export function subscribePlayback(listener: () => void): () => void {
 }
 
 /**
+ * Silences the feed: Home blurred or the app backgrounded.
+ *
+ * A pure function here so the coordinator stays free of React Native imports and
+ * remains testable in Node — the caller (Home) wires the focus/AppState events.
+ * Idempotent, so overlapping blur + background events cost exactly one pause.
+ */
+export function suspendPlayback(): void {
+  if (suspended) return;
+  suspended = true;
+  if (activeId) {
+    try {
+      targets.get(activeId)?.pause();
+    } catch {
+      // A player released underneath us is not worth failing a suspend over.
+    }
+  }
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Re-opens the switch after {@link suspendPlayback} and re-applies the winner, so
+ * the still-visible video resumes without waiting for a scroll. No-op if not
+ * suspended, which is the common case on first focus.
+ */
+export function resumePlayback(): void {
+  if (!suspended) return;
+  suspended = false;
+  reconcile(true);
+}
+
+/**
  * Clears every registration.
  *
  * **Needed on sign-out**, for the same reason the query cache is cleared: a video
@@ -235,6 +291,7 @@ export function resetPlayback(): void {
   targets.clear();
   viewport = null;
   activeId = null;
+  suspended = false;
   for (const listener of listeners) listener();
   listeners.clear();
 }

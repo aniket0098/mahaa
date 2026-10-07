@@ -1,33 +1,24 @@
 /**
  * PostVideo — a playable video inside a post card.
  *
- * **Autoplay, but only when the feed coordinator says this is the one video
- * allowed to play.** Visibility is measured by `feedPlayback.ts` rather than
- * guessed here: a video begins when roughly half of it is on screen and stops
- * when it is not, which keeps two posts from talking over each other mid-scroll.
+ * **Autoplay when the coordinator says this is the one video allowed to play.**
+ * The slot registers as soon as the card lays out — *before* any bytes are
+ * downloaded — so an unloaded video can still be chosen as active. When it
+ * becomes active it downloads and starts (no tap required); when it stops being
+ * active it pauses, keeping two posts from talking over each other mid-scroll.
  *
- * **Muted by default, and that is a platform requirement, not a preference.**
- * Every mobile browser and both native platforms refuse to autoplay a video with
- * sound. So `muted` starts `true`, the player is configured muted before its first
- * frame, and the reader unmutes deliberately. `loop` is on so a short clip does
- * not end mid-scroll.
+ * **Sound on native, muted on web.** Android/iOS players autoplay with audio in
+ * the foreground, so the player starts unmuted there. The browser refuses
+ * unmuted autoplay outright, so it starts muted in the browser only. Either way
+ * only the active video is ever downloaded.
  *
- * **The bytes are still fetched through the authenticated client.** `GET /media/{id}`
- * serves the file to its uploader only and there is no unsigned variant, so no
- * player can be handed a URL it can open directly. `loadPlayableVideoUri()`
- * downloads through the bearer token and the player gets the local copy. That is
- * why there is a loading state at all, and why the download only starts once the
- * card is visible.
+ * **The bytes are fetched through the authenticated client.** `GET /media/{id}`
+ * serves the file to its uploader only, so `loadPlayableVideoUri()` downloads
+ * through the bearer token and the player gets the local copy. That is why there
+ * is a loading state, and why the download begins the moment the slot is active.
  *
- * **A failure says what failed.** The retry frame reads "Couldn't play this
- * video / Tap to retry" — never anything about an image, because the two are
- * different failures and a wrong message sends the reader looking in the wrong
- * place.
- *
- * **The controls are ours, not the platform's.** `nativeControls` would give a
- * nicer scrubber, but expo-video exposes no way to observe that the user pressed
- * play inside it, and "only one video plays at a time" depends on knowing when a
- * player starts. Owning play/pause/mute is what makes that guarantee real.
+ * **The controls are ours, not the platform's.** Owning play/pause/mute is what
+ * makes the "only one video plays at a time" guarantee real.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -58,16 +49,44 @@ export interface PostVideoProps {
   postId: string;
   /** Top of this frame within the scroll content, measured by the card. */
   top: number;
+  /**
+   * Whether this video's page is the one showing in the card's media pager.
+   *
+   * An off-screen page must neither register nor play: two pages of one post
+   * carry the same post id, so a hidden page sharing the slot would clobber the
+   * visible page's registration and play unheard — the "two videos at once"
+   * outcome the coordinator exists to prevent.
+   */
+  current?: boolean;
 }
 
-export function PostVideo({ uri, alt, height, postId, top }: PostVideoProps) {
+/** The slice of a player the coordinator is allowed to drive. */
+interface PlayerApi {
+  play: () => void;
+  pause: () => void;
+}
+
+export function PostVideo({ uri, alt, height, postId, top, current = true }: PostVideoProps) {
   const [playable, setPlayable] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
 
   // An object url is owned by the browser and has to be released, or the blob
   // stays in memory for the whole session.
   const owned = useRef<string | null>(null);
+  // The mounted player's play/pause, handed up by `VideoSurface` once it exists.
+  const playerApi = useRef<PlayerApi | null>(null);
+  // A tap-to-pause is sticky: the coordinator must not undo it on the next frame.
+  const pausedByHand = useRef(false);
+  // Whether the coordinator wants this slot playing — it can outlive a player
+  // that has not been created yet (the download is still in flight).
+  const wanted = useRef(false);
+  // Re-entry state kept in refs so `activate`/`deactivate` stay referentially
+  // stable and the coordinator is never forced to re-register on a state change.
+  const loadingRef = useRef(false);
+  const loadedRef = useRef(false);
+  const failedRef = useRef(false);
 
   useEffect(
     () => () => {
@@ -79,23 +98,126 @@ export function PostVideo({ uri, alt, height, postId, top }: PostVideoProps) {
   );
 
   const load = useCallback(async () => {
+    // One download at a time, and never re-fetch a source already in hand.
+    if (loadingRef.current || loadedRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     setFailed(false);
+    failedRef.current = false;
     try {
       const local = await loadPlayableVideoUri(uri);
       if (Platform.OS === 'web') {
         if (owned.current) URL.revokeObjectURL(owned.current);
         owned.current = local;
       }
+      loadedRef.current = true;
       setPlayable(local);
     } catch {
       // Deliberately generic: a 404 and a network drop mean the same thing to a
       // reader, and the server message would add nothing here.
+      failedRef.current = true;
       setFailed(true);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }, [uri]);
+
+  // The coordinator named this the active slot: play it, downloading first if the
+  // bytes are not here yet. A sticky manual pause always wins over autoplay.
+  const activate = useCallback(() => {
+    if (pausedByHand.current) return;
+    wanted.current = true;
+    if (playerApi.current) {
+      playerApi.current.play();
+      setPlaying(true);
+      return;
+    }
+    if (!loadedRef.current && !loadingRef.current && !failedRef.current) {
+      void load();
+    }
+  }, [load]);
+
+  const deactivate = useCallback(() => {
+    wanted.current = false;
+    playerApi.current?.pause();
+    setPlaying(false);
+  }, []);
+
+  // Register for the whole life of the *visible* page; unregistering on unmount
+  // (or when the pager pages past this video) is what frees the feed's single
+  // playback slot for the next video. An off-screen page must not register: two
+  // pages of one post carry the same post id, and the later registration would
+  // clobber the earlier one — leaving the coordinator holding a target whose
+  // owner believes it is still registered.
+  useEffect(() => {
+    if (!current) return undefined;
+
+    return registerVideo({ id: postId, top, height }, { play: activate, pause: deactivate });
+  }, [postId, top, height, activate, deactivate, current]);
+
+  // Paging past this video must stop its sound even though nothing unmounted:
+  // without this, the page left behind would keep talking while the newly
+  // visible page starts — two videos of one post playing at once. This is
+  // `deactivate()` minus its `setPlaying`, which would be a setState synchronously
+  // inside an effect; the subscription above corrects `playing` instead, and it
+  // re-subscribes on this same `current` flip.
+  useEffect(() => {
+    if (current) return;
+    wanted.current = false;
+    playerApi.current?.pause();
+  }, [current]);
+
+  // The coordinator only notifies when the *winner* changes, so this re-renders
+  // one card rather than the whole feed. `current` is part of the answer because
+  // a hidden page of a post whose visible page just won must not claim to play.
+  useEffect(
+    () =>
+      subscribePlayback(() =>
+        setPlaying(getActiveVideoId() === postId && current && !pausedByHand.current),
+      ),
+    [postId, current],
+  );
+
+  // Leaving the screen must stop the sound, whatever the coordinator thinks.
+  useEffect(
+    () => () => {
+      playerApi.current?.pause();
+    },
+    [],
+  );
+
+  const attachPlayer = useCallback((api: PlayerApi | null) => {
+    playerApi.current = api;
+    // The player arrived after `activate` asked for playback: honour it now.
+    if (api && wanted.current && !pausedByHand.current) {
+      api.play();
+      setPlaying(true);
+    }
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (playing) {
+      pausedByHand.current = true;
+      playerApi.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    pausedByHand.current = false;
+    wanted.current = true;
+    if (playerApi.current) {
+      try {
+        playerApi.current.play();
+        setPlaying(true);
+      } catch {
+        setPlaying(false);
+      }
+    } else {
+      // A poster that never auto-loaded (it may have failed earlier): load it now.
+      void load();
+    }
+  }, [playing, load]);
+
   if (failed) {
     return (
       <View style={[styles.frame, { height }]} testID="feed-post-video-error">
@@ -128,13 +250,16 @@ export function PostVideo({ uri, alt, height, postId, top }: PostVideoProps) {
         playable={playable}
         alt={alt}
         height={height}
-        postId={postId}
-        top={top}
+        playing={playing}
+        onToggle={toggle}
+        onAttach={attachPlayer}
         onRetry={() => {
           // Drop the source the player rejected so the next attempt re-downloads
           // rather than re-trying a URI already known to be unusable.
           setPlayable(null);
+          loadedRef.current = false;
           setFailed(false);
+          failedRef.current = false;
           void load();
         }}
       />
@@ -170,108 +295,64 @@ export function PostVideo({ uri, alt, height, postId, top }: PostVideoProps) {
 }
 
 /**
- * The player itself, in its own component so `useVideoPlayer` is only ever
- * called once a real source exists — the hook requires a source, and there is
- * none until the download finishes.
+ * The player itself, in its own component so `useVideoPlayer` is only ever called
+ * once a real source exists — the hook requires a source, and there is none until
+ * the download finishes.
  *
- * **Two things drive playback here, and they are deliberately different.**
- * Visibility is not this component's business: it registers with the feed
- * coordinator and plays or pauses when asked. A tap, by contrast, is *this*
- * component's business, because the reader asked for something no amount of
- * scrolling should override — so a manual pause is sticky until the reader
- * presses play again, rather than being undone by the next scroll frame.
- *
- * That sticky flag is what stops the worst autoplay annoyance there is: scrolling
- * past a video you deliberately paused and having it start again when you scroll
- * back.
+ * It deliberately does **not** register with the coordinator: the outer `PostVideo`
+ * owns that registration for the card's whole life, so an unloaded video can still
+ * be chosen as active and told to download. This surface only renders the bytes,
+ * hands its play/pause back through `onAttach`, and owns the mute toggle (which
+ * needs the player instance).
  */
 function VideoSurface({
   playable,
   alt,
   height,
-  postId,
-  top,
+  playing,
+  onToggle,
+  onAttach,
   onRetry,
 }: {
   playable: string;
   alt: string;
   height: number;
-  postId: string;
-  top: number;
+  playing: boolean;
+  onToggle: () => void;
+  onAttach: (api: PlayerApi | null) => void;
   onRetry: () => void;
 }) {
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(true);
+  const player = useVideoPlayer({ uri: playable }, (created) => {
+    // Muted on web, where the browser refuses unmuted autoplay. On native the
+    // platform allows a foreground video to start with audio, so it is left on —
+    // applied here, before the first frame, which is the only free moment.
+    created.muted = Platform.OS === 'web';
+    // A short clip that stops mid-scroll looks broken rather than finished.
+    created.loop = true;
+  });
 
-  // Set when the reader pauses by hand. While true, visibility changes do not
-  // resume playback. Cleared only by pressing play again.
-  const pausedByHand = useRef(false);
+  const [muted, setMuted] = useState(Platform.OS === 'web');
 
-  const player = useVideoPlayer(
-    { uri: playable },
-    (created) => {
-      // Muted before the first frame: every platform refuses unmuted autoplay,
-      // and this is the only moment the setting can be applied for free.
-      created.muted = true;
-      // A short clip that stops mid-scroll looks broken rather than finished.
-      created.loop = true;
-    },
-  );
-
-  const play = useCallback(() => {
-    if (pausedByHand.current) return;
-    try {
-      player.play();
-      setPlaying(true);
-    } catch {
-      // Autoplay being refused by the platform is not a crash; the frame stays
-      // paused and the reader can still press play.
-    }
-  }, [player]);
-
-  const pause = useCallback(() => {
-    try {
-      player.pause();
-    } catch {
-      // A player released underneath us is not worth failing a scroll over.
-    }
-    setPlaying(false);
-  }, [player]);
-
-  // Register with the coordinator, and re-register when the measured position
-  // moves. The returned unsubscribe runs on unmount, which is what stops a
-  // vanished card from holding the feed's single playback slot.
+  // Hand the coordinator a way to drive this player, and take it back on unmount.
   useEffect(() => {
-    const unregister = registerVideo({ id: postId, top, height }, { play, pause });
-    return unregister;
-  }, [postId, top, height, play, pause]);
-
-  // The coordinator only notifies when the *winner* changes, so this re-renders
-  // one card rather than the whole feed.
-  useEffect(
-    () => subscribePlayback(() => setPlaying(getActiveVideoId() === postId)),
-    [postId],
-  );
-
-  // Leaving the screen must stop the sound, whatever the coordinator thinks.
-  useEffect(() => () => pause(), [pause]);
-
-  const toggle = useCallback(() => {
-    if (player.playing) {
-      pausedByHand.current = true;
-      pause();
-      return;
-    }
-    // A manual press overrides a previous manual pause, and also re-claims the
-    // slot: the coordinator may believe another video owns playback right now.
-    pausedByHand.current = false;
-    try {
-      player.play();
-      setPlaying(true);
-    } catch {
-      setPlaying(false);
-    }
-  }, [pause, player]);
+    onAttach({
+      play: () => {
+        try {
+          player.play();
+        } catch {
+          // Autoplay being refused by the platform is not a crash.
+        }
+      },
+      pause: () => {
+        try {
+          player.pause();
+        } catch {
+          // A player released underneath us is not worth failing a scroll over.
+        }
+      },
+    });
+    return () => onAttach(null);
+  }, [onAttach, player]);
 
   const toggleMute = useCallback(() => {
     setMuted((current) => {
@@ -299,7 +380,7 @@ function VideoSurface({
           accessibilityRole="button"
           accessibilityLabel={playing ? 'Pause video' : 'Play video'}
           accessibilityState={{ selected: playing }}
-          onPress={toggle}
+          onPress={onToggle}
           hitSlop={8}
           style={styles.controlButton}
           testID="feed-post-video-toggle">
@@ -335,7 +416,7 @@ function VideoSurface({
       </View>
 
       {player.status === 'error' ? (
-        // A player can fail *after* mounting - a decode error, a revoked source -
+        // A player can fail *after* mounting — a decode error, a revoked source —
         // which no error boundary around the download would catch. The frame says
         // so instead of leaving a frozen first frame on screen.
         <Pressable
@@ -357,7 +438,8 @@ function VideoSurface({
 }
 
 const styles = StyleSheet.create({
-  frame: {    alignItems: 'center',
+  frame: {
+    alignItems: 'center',
     backgroundColor: colors.colorBgMuted,
     justifyContent: 'center',
     overflow: 'hidden',

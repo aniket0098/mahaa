@@ -1,7 +1,7 @@
 /**
  * Publishing, end to end: what the screen does after the server answers 201.
  *
- * **Structural, like `video.test.ts` and `homeComposer.test.ts`.** `add-post.tsx`
+ * **Structural, like `video.test.ts` and `homeCreatePost.test.ts`.** `add-post.tsx`
  * imports `react-native` and `expo-router`, so it cannot be rendered in this
  * Node-only runner. What is worth protecting here is the *wiring*, because the
  * two properties below are exactly what break silently:
@@ -110,5 +110,33 @@ describe('publishing a story', () => {
     // "nothing is rendered optimistically", and a prose match would fail on the
     // sentence documenting the rule it is checking.
     expect(storyScreen).not.toMatch(/setQueryData|optimisticStory|placeholderStory/);
+  });
+
+  it('offers an explicit Upload button for the chosen media', () => {
+    // The user must be able to send the file and see real progress before
+    // publishing — not only through the header Publish path.
+    expect(storyScreen).toContain('testID="create-story-upload"');
+    expect(storyScreen).toContain('accessibilityLabel="Upload the chosen media"');
+    expect(storyScreen).toContain('void uploadNow()');
+    // The button clears the 44px inline-secondary touch minimum.
+    expect(storyScreen).toContain('minHeight: 44');
+  });
+
+  it('keys the uploaded id to the file it came from and reuses it in Publish', () => {
+    // A bare id would attach the previous file's media to a story whose caption
+    // describes the new one; a stale key fails to match and simply re-uploads.
+    expect(storyScreen).toContain('uploaded.localUri === draft.media.localUri');
+    // Any attachment change drops the id — one place that could forget.
+    expect(storyScreen).toContain("if ('media' in patch) setUploaded(null);");
+    // After a successful explicit upload the button becomes a status line.
+    expect(storyScreen).toContain('testID="create-story-media-uploaded"');
+  });
+
+  it('guards the upload button with a ref, like Publish', () => {
+    // Same same-frame reason as `publishing`: two taps in one frame would send
+    // the same bytes twice.
+    expect(storyScreen).toContain('const uploading = useRef(false);');
+    expect(storyScreen).toContain('if (!media || uploading.current || phase !== \'editing\') return;');
+    expect(storyScreen).toContain('uploading.current = false;');
   });
 });

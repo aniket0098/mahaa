@@ -1,0 +1,106 @@
+# =============================================================================
+# Mahaa — local development stack (Docker Phase 2).
+#
+#   postgres (healthy) --> migrate (alembic upgrade head, one-shot) --> api
+#
+# Local environment handling — no credentials are committed here. Every value
+# below is `${VAR:-safe-local-default}`, so the stack starts with safe local
+# development values and nothing else. To override one, either export the
+# variable in your shell before `docker compose up`, or add it to the gitignored
+# root `.env`, which Docker Compose reads automatically for interpolation.
+#
+# The five values to supply for your own environment:
+#
+#   DATABASE_URL   postgresql+psycopg://user:pass@postgres:5432/mahaa
+#                  (host MUST be `postgres` inside the Compose network)
+#   JWT_SECRET     at least 32 characters; generate with
+#                  python -c "import secrets; print(secrets.token_urlsafe(48))"
+#   CORS_ORIGINS   exact origins, comma separated, never a wildcard
+#   APP_ENV        development | test | production
+#   DEBUG          true | false
+#
+# Production values (Neon, Render) live only in the platform, never in this file.
+#
+# Realtime: a single API instance is intentional for local realtime testing.
+# Multiple API replicas require REDIS_URL for cross-instance WebSocket/event
+# fan-out. No Redis is added in this phase, and every REST route is unaffected by
+# its absence.
+# =============================================================================
+
+# Shared runtime configuration for the two services that talk to the database.
+# An anchor rather than a copy so `api` and `migrate` can never drift apart and
+# migrate one database while the API serves another.
+x-api-environment: &api-environment
+  APP_ENV: ${APP_ENV:-development}
+  DEBUG: ${DEBUG:-false}
+  # The driver is psycopg 3, and the host is the Compose service name `postgres`,
+  # never `localhost`: inside the API container, localhost is the container.
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://mahaa:mahaa_local_dev@postgres:5432/mahaa}
+  # A development placeholder only. `APP_ENV=production` refuses to boot with
+  # this value, which is exactly the intended behaviour.
+  JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081,http://localhost:8082,http://localhost:8083,http://localhost:8084,http://localhost:8085}
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      # Safe local development values, overridable from the shell or the
+      # gitignored root `.env`. If you override the password here, set
+      # DATABASE_URL above to match.
+      POSTGRES_USER: ${POSTGRES_USER:-mahaa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mahaa_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-mahaa}
+    volumes:
+      # Named volume, not a bind mount: the database must survive
+      # `docker compose down` and must not inherit host file permissions.
+      - mahaa_pgdata:/var/lib/postgresql/data
+    ports:
+      # Published so host-side tooling — the backend test suite in particular —
+      # can reach the container database. Host port 5434 because this machine
+      # already runs its own PostgreSQL on 5432 *and* 5433; publishing into
+      # either would silently send host traffic to the host's database instead of
+      # the container's. On the Compose network the database is always
+      # `postgres:5432`, whichever host port is published.
+      - "${POSTGRES_HOST_PORT:-5434}:5432"
+    healthcheck:
+      # `$$` escapes the `$` so the value is read inside the container, where the
+      # POSTGRES_* variables above are already set.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot migration job. Same image as the API, so the schema is built by the
+  # exact code that then serves it.
+  migrate:
+    image: mahaa-api:local
+    # Required: `alembic.ini` declares `script_location = alembic`, which is
+    # relative to the working directory. Running from anywhere else makes Alembic
+    # look for the wrong directory and fail.
+    working_dir: /app
+    command: ["alembic", "upgrade", "head"]
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    image: mahaa-api:local
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # The API must not start before the schema is current. Keeping migrations
+      # out of the API command is what makes this safe to scale later: N replicas
+      # would each try to migrate on boot, and they would race.
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  mahaa_pgdata:

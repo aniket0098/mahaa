@@ -26,7 +26,7 @@ const EAS_JSON = fileURLToPath(new URL('../../eas.json', import.meta.url));
 const ENV_EXAMPLE = fileURLToPath(new URL('../../.env.example', import.meta.url));
 
 /** The deployed API. Plain text by design: `EXPO_PUBLIC_*` ships in the bundle. */
-const PRODUCTION_API_BASE_URL = 'https://mahaa-backend.onrender.com/api/v1';
+const PRODUCTION_API_BASE_URL = 'https://mahaa-backend-docker.onrender.com/api/v1';
 
 interface BuildProfile {
   env?: Record<string, string>;

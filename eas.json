@@ -14,14 +14,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://mahaa-backend.onrender.com/api/v1",
+        "EXPO_PUBLIC_API_BASE_URL": "https://mahaa-backend-docker.onrender.com/api/v1",
         "EXPO_PUBLIC_API_BASE_URL_LAN": "disabled"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://mahaa-backend.onrender.com/api/v1",
+        "EXPO_PUBLIC_API_BASE_URL": "https://mahaa-backend-docker.onrender.com/api/v1",
         "EXPO_PUBLIC_API_BASE_URL_LAN": "disabled"
       }
     }

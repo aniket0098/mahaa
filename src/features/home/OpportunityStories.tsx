@@ -13,8 +13,10 @@
  * - **The first bubble is `YourStoryButton`, which opens `/add-story`** (Phase
  *   12). It used to be a generic Create (+) that opened the *post* composer,
  *   which from a row of stories was the wrong destination.
- * - Post creation stays one tap away on the composer card below, so the page
- *   still has both entries — there is just one entry per thing
+ * - **A blue `CreatePostButton` (+) sits at the row's left edge, with `Your
+ *   story` beside it**, and opens `/add-post`, replacing the removed composer
+ *   card — one compact entry for posts, one for stories, and no card between
+ *   Stories and the feed.
  * - With demo mode off and no real stories, the honest empty state stands
  */
 
@@ -23,6 +25,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { YourStoryButton } from '@/features/stories/YourStoryButton';
+import { CreatePostButton } from '@/features/home/CreatePostButton';
 import { styles } from '@/features/home/homeStyles';
 import { StoryBubble } from '@/features/stories/StoryBubble';
 import type { StoryItem } from '@/types/story';
@@ -64,11 +67,10 @@ export function OpportunityStories({ stories, name, avatarUrl }: OpportunityStor
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.storyRow}>
-        {/* **Your story comes first and opens story creation.** It replaced the
-            generic Create (+) circle, which opened the *post* composer: from a
-            row of stories, the entry that belongs is the one that adds a story.
-            Post creation is still one tap away from the composer card below, so
-            nothing became harder to reach and one misleading entry disappeared. */}
+        {/* The compact blue Create Post (+) comes first, at the row's left edge,
+            and `Your story` follows it — the two entries side by side,
+            replacing the removed composer card. */}
+        <CreatePostButton />
         <YourStoryButton name={name} avatarUrl={avatarUrl} />
         {stories.map((story) => (
           <StoryBubble

@@ -58,13 +58,19 @@ import { usePostEngagement } from '@/features/feed/usePostEngagement';
 
 export interface FeedPostCardProps {
   post: FeedPost;
+  /**
+   * The feed's origin within the scroll content, added to this card's own
+   * list-relative offset so the playback coordinator's `contentOffset`-based
+   * viewport compares like with like.
+   */
+  baseOffset?: number;
   /** Opens the author's profile. Only meaningful when the post carries a route. */
   onOpenProfile: () => void;
   /** Opens an outbound link in the system browser. */
   onOpenLink: (url: string) => void;
 }
 
-export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardProps) {
+export function FeedPostCard({ post, baseOffset = 0, onOpenProfile, onOpenLink }: FeedPostCardProps) {
   // One subscription per card. A save or a hide changes the module store, and
   // this is what re-renders the card against the new value. (Likes are server
   // state now and arrive through React Query instead.)
@@ -79,10 +85,19 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
-  // This card's own offset within the scroll content. The feed reports its
-  // scroll offset; the difference of the two is what tells the playback
+  // This card's own offset within the scroll content: the feed's origin (the
+  // `baseOffset` prop) plus this card's list-relative position. The feed reports
+  // its scroll offset; the difference of the two is what tells the playback
   // coordinator whether a video here is on screen.
-  const [top, setTop] = useState(0);
+  const [measuredY, setMeasuredY] = useState(0);
+  // Where the media band sits inside this card. The coordinator's slot has to be
+  // the *video's* rectangle: keying it on the card's top alone would start
+  // playback when the header crosses half the screen and — worse — pause the
+  // moment the video itself fills the screen, because by then the card's top is
+  // long gone from the viewport.
+  const [mediaY, setMediaY] = useState(0);
+  const top = baseOffset + measuredY;
+  const mediaTop = top + mediaY;
 
   const engagement = usePostEngagement(post);
 
@@ -108,7 +123,7 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
         // Only a card holding a video needs to publish a position; the rest would
         // re-render on every layout pass for no reader-visible reason.
         if (!post.media.some((item) => item.kind === 'video')) return;
-        setTop(nativeEvent.layout.y);
+        setMeasuredY(nativeEvent.layout.y);
       }}>
       <View style={styles.cardBody}>
         <PostHeader
@@ -161,12 +176,19 @@ export function FeedPostCard({ post, onOpenProfile, onOpenLink }: FeedPostCardPr
       </View>
 
       {post.media.length > 0 ? (
-        <View style={styles.mediaPad}>
+        <View
+          style={styles.mediaPad}
+          onLayout={({ nativeEvent }: LayoutChangeEvent) => {
+            // Same guard as the card's own measurement: only a card holding a
+            // video has a position the playback coordinator needs.
+            if (!post.media.some((item) => item.kind === 'video')) return;
+            setMediaY(nativeEvent.layout.y);
+          }}>
           <PostMedia
             media={post.media}
             onOpen={setViewerIndex}
             postId={post.id}
-            top={top}
+            top={mediaTop}
           />
         </View>
       ) : null}

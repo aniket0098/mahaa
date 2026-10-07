@@ -103,13 +103,15 @@ describe('one rule, reached through every media surface', () => {
     expect(api).not.toContain('function pathOf');
   });
 
-  it('the Home composer avatar uses the same function as everything else', () => {
-    const card = readFileSync(
-      fileURLToPath(new URL('../features/home/HomeComposerCard.tsx', import.meta.url)),
+  it('the Home story-row avatar uses the same function as everything else', () => {
+    // The old composer card is gone; the story row's `Your story` avatar is the
+    // Home surface that still resolves the caller's picture, so it carries the rule.
+    const story = readFileSync(
+      fileURLToPath(new URL('../features/stories/YourStoryButton.tsx', import.meta.url)),
       'utf8',
     );
-    expect(card).toContain('absoluteMediaUri(avatarUrl)');
-    expect(card).not.toMatch(/apiBaseUrl/);
+    expect(story).toContain('absoluteMediaUri(avatarUrl)');
+    expect(story).not.toMatch(/apiBaseUrl/);
   });
 });
 

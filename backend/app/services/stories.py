@@ -49,6 +49,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError, ErrorCode, error_detail
+from app.core.wire import wire_datetime
 from app.models.enums import StoryPublisherKind, StoryStatus
 from app.models.media import MediaAsset
 from app.models.stories import Story, StoryView
@@ -361,7 +362,7 @@ def create_story(session: Session, principal: User, payload: StoryCreate) -> Sto
     content_events.story_created(
         story_id=str(story.id),
         author_id=str(story.author_id),
-        created_at=story.created_at.isoformat(),
+        created_at=wire_datetime(story.created_at),
     )
     return _to_out(story, _publisher_out(story), False)
 

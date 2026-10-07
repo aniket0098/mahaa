@@ -583,7 +583,7 @@ async function publishStory(page, { caption, file }) {
     { label: 'the story composer to accept the file', timeoutMs: 30_000 },
   );
 
-  await tap(page, 'Publish story', { timeoutMs: 20_000 });
+  await tap(page, 'Publish', { timeoutMs: 20_000 });
   await page.waitFor(`location.pathname === '/home'`, {
     label: 'the story composer to close after a 201',
     timeoutMs: 60_000,
