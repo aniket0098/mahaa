@@ -69,6 +69,13 @@ export const colors = {
   colorPrimarySubtle: palette.blue50,
   colorSecondary: palette.sky500,
 
+  // Story rings. Scoped to stories so nothing borrows `colorWarning` (the other
+  // amber) for decoration: `…Premium` is the deep gold readable as a ring on a
+  // light surface, `…PremiumBright` is the same family lightened for the dark
+  // viewer surfaces (badges, small accents).
+  colorStoryPremium: palette.amber600,
+  colorStoryPremiumBright: palette.amber400,
+
   // Feedback families
   colorSuccess: palette.emerald600,
   colorSuccessSubtle: palette.emerald50,

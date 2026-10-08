@@ -20,6 +20,7 @@
  * - With demo mode off and no real stories, the honest empty state stands
  */
 
+import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, View } from 'react-native';
 
@@ -28,6 +29,7 @@ import { YourStoryButton } from '@/features/stories/YourStoryButton';
 import { CreatePostButton } from '@/features/home/CreatePostButton';
 import { styles } from '@/features/home/homeStyles';
 import { StoryBubble } from '@/features/stories/StoryBubble';
+import { groupStoriesByAuthor } from '@/features/stories/storyGroups';
 import type { StoryItem } from '@/types/story';
 
 export interface OpportunityStoriesProps {
@@ -45,6 +47,13 @@ export interface OpportunityStoriesProps {
 
 export function OpportunityStories({ stories, name, avatarUrl }: OpportunityStoriesProps) {
   const router = useRouter();
+
+  // ONE circle per person: grouping is a pure function of the list, memoised so
+  // a parent re-render does not rebuild every group identity. Keyed by
+  // `authorPublicId` inside `groupStoriesByAuthor` — never by story id, type
+  // or index, which is what used to render three circles for three stories
+  // from the same person.
+  const groups = useMemo(() => groupStoriesByAuthor(stories), [stories]);
 
   return (
     <View style={[styles.section, styles.storiesSection]} testID="opportunity-stories">
@@ -72,11 +81,15 @@ export function OpportunityStories({ stories, name, avatarUrl }: OpportunityStor
             replacing the removed composer card. */}
         <CreatePostButton />
         <YourStoryButton name={name} avatarUrl={avatarUrl} />
-        {stories.map((story) => (
+        {groups.map((group) => (
           <StoryBubble
-            key={story.id}
-            story={story}
-            onPress={() => router.push(`/story/${story.id}` as never)}
+            key={group.authorPublicId}
+            group={group}
+            onPress={() =>
+              // Open at the group's first story id; the story screen resolves
+              // the whole group and resumes at its first unviewed member.
+              router.push(`/story/${group.stories[0].id}` as never)
+            }
           />
         ))}
       </ScrollView>

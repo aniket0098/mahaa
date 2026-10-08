@@ -1,22 +1,27 @@
 /**
  * Story viewer screen for candidates.
  *
- * Full-screen viewer with progress bars, publisher branding, caption card, and
- * an optional "View job" CTA for stories that carry a real opportunity.
+ * Resolves the tapped story id into a **group** (one person's stories, oldest
+ * first) and hands `StoryViewer` the whole grouped list plus an opening
+ * position — so the viewer walks story → story → next person without ever
+ * coming back here for data.
  *
  * Two sources, one viewer:
  *  - a **real** story id from `GET /stories`, which records a view through
  *    `POST /stories/{id}/view` and refreshes the cached ring state; and
- *  - a **demo** id (`demo-…`) from `demoStories.ts`, which is resolved locally
- *    and is never sent to the API — no `GET /stories/{id}`, no view POST, and no
- *    cache invalidation, because there is no server row whose state could change.
+ *  - a **demo** id (`demo-…` from `demoStories.ts`), resolved locally and
+ *    never sent to the API — no view POST, no cache invalidation.
  *
- * The demo branch is taken from the id before any request, so opening a demo
- * story works even when the stories request itself is still in flight or has
- * failed, and no demo id can ever reach the transport layer.
+ * **The record-view callback is built from react-query's stable `mutate`
+ * reference** — never from the whole mutation object, which is a fresh object
+ * every render. Combined with `StoryViewer`'s record-once-per-story-id effect,
+ * this is the fix for the production crash: the old chain
+ * (unstable callback → effect re-fire → POST → invalidate → refetch →
+ * re-render → …) ended in "Maximum update depth exceeded" and a dead Android
+ * process about a second after the caption appeared.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -27,6 +32,7 @@ import { AppText } from '@/components/ui/AppText';
 import { BackButton } from '@/components/ui/BackButton';
 import { StoryViewer } from '@/features/stories/StoryViewer';
 import { isDemoStory, isDemoStoryId, markDemoStoryViewed } from '@/features/stories/demoStories';
+import { groupStoriesByAuthor, positionForStoryId } from '@/features/stories/storyGroups';
 import { useStoryList } from '@/features/stories/useStoryList';
 import { colors } from '@/theme/tokens';
 
@@ -45,13 +51,19 @@ export default function StoryScreen() {
   const recordViewMutation = useMutation({
     mutationFn: (storyId: string) => recordStoryView(storyId),
     onSuccess: () => {
-      // Refresh stories in cache so ring transitions to 'viewed' immediately
+      // Refresh the stories cache so the ring transitions to 'viewed'. Safe to
+      // do repeatedly *now*: nothing re-fires the mutation on a refetch — the
+      // viewer records each story id exactly once.
       void queryClient.invalidateQueries({ queryKey: queryKeys.stories });
     },
   });
+  // react-query guarantees `mutate` is referentially stable; depending on the
+  // mutation object (a new object per render) was half of the crash loop.
+  const mutateRecordView = recordViewMutation.mutate;
 
-  const stories = useStoryList(storiesQuery.data?.items);
-  const initialIndex = stories.findIndex((s: StoryItem) => s.id === id);
+  const storyItems = useStoryList(storiesQuery.data?.items);
+  // Grouping lives in a pure module; the screen only positions the viewer.
+  const groups = useMemo(() => groupStoriesByAuthor(storyItems), [storyItems]);
   // Decided from the id alone, before any request is made, so a demo story can
   // never wait on — or be looked up in — the stories API.
   const isDemoTarget = isDemoStoryId(id);
@@ -72,9 +84,9 @@ export default function StoryScreen() {
         markDemoStoryViewed(story.id);
         return;
       }
-      recordViewMutation.mutate(story.id);
+      mutateRecordView(story.id);
     },
-    [recordViewMutation],
+    [mutateRecordView],
   );
 
   const handleOpenOpportunity = useCallback(
@@ -83,6 +95,10 @@ export default function StoryScreen() {
     },
     [router],
   );
+
+  // The tapped id → its group + the first unviewed story in that group, so a
+  // partially-watched person resumes where they stopped.
+  const position = useMemo(() => (id ? positionForStoryId(groups, id) : null), [groups, id]);
 
   // A demo story is local, so waiting on the stories request would only delay
   // content that is already in hand.
@@ -94,7 +110,7 @@ export default function StoryScreen() {
     );
   }
 
-  if (initialIndex === -1) {
+  if (!position) {
     return (
       <View style={styles.centerContainer}>
         <BackButton />
@@ -107,8 +123,8 @@ export default function StoryScreen() {
 
   return (
     <StoryViewer
-      stories={stories}
-      initialIndex={initialIndex}
+      groups={groups}
+      initialPosition={position}
       onClose={handleClose}
       onStoryViewed={handleStoryViewed}
       onOpenOpportunity={handleOpenOpportunity}
@@ -119,7 +135,7 @@ export default function StoryScreen() {
 const styles = StyleSheet.create({
   centerContainer: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.colorTextPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,

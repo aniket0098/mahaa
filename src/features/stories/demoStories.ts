@@ -92,6 +92,11 @@ export function createDemoStories(nowIso: string): DemoStory[] {
       opportunity: null,
       viewed: false,
       createdAt: nowIso,
+      // Demo content has no server asset and no account behind it: a local
+      // author key keeps grouping deterministic without inventing an API row.
+      media: null,
+      authorPublicId: `${DEMO_STORY_ID_PREFIX}author-mahajob`,
+      isSelf: false,
       demo: true,
       title: 'Welcome to MahaJob',
       typeLabel: 'Announcement',
@@ -105,6 +110,9 @@ export function createDemoStories(nowIso: string): DemoStory[] {
       opportunity: null,
       viewed: false,
       createdAt: nowIso,
+      media: null,
+      authorPublicId: `${DEMO_STORY_ID_PREFIX}author-career-tips`,
+      isSelf: false,
       demo: true,
       title: 'Build Your Career',
       // "Career information" is not a member of the API's content-type enum, so

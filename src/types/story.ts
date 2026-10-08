@@ -20,6 +20,28 @@ export interface StoryOpportunitySummary {
   readonly workMode: string | null;
 }
 
+/**
+ * The asset a story carries, mirroring `StoryMediaOut`
+ * (`apps/api/app/schemas/stories.py`).
+ *
+ * `uri` is the server's **relative** `served_at` path (`/api/v1/media/{id}`) —
+ * never an absolute host — and goes through `absoluteMediaUri()`/`resolveMediaUrl`
+ * before anything fetches it. A native player cannot attach the bearer token,
+ * so playback downloads the bytes through the authenticated media client first
+ * (`loadPlayableVideoUri`), exactly as the feed does.
+ */
+export interface StoryMedia {
+  readonly id: string;
+  readonly kind: 'image' | 'video';
+  readonly mimeType: string;
+  readonly width: number | null;
+  readonly height: number | null;
+  /** Always null in V1 (no decoder server-side) — "unknown", not "zero". */
+  readonly durationMs: number | null;
+  readonly sizeBytes: number;
+  readonly uri: string;
+}
+
 export interface Story {
   readonly id: string;
   readonly contentType: StoryContentType;
@@ -29,6 +51,15 @@ export interface Story {
   readonly opportunity: StoryOpportunitySummary | null;
   readonly viewed: boolean;
   readonly createdAt: string;
+  /** The uploaded media, or null for a text-only story. */
+  readonly media: StoryMedia | null;
+  /**
+   * The author's public id (`MJ-…`) — the stable key one person's stories are
+   * grouped by. Present on every API story; demo stories carry a local id.
+   */
+  readonly authorPublicId: string;
+  /** Whether the current viewer is the author — hides the Connect control. */
+  readonly isSelf: boolean;
 }
 
 export interface StoryViewResult {

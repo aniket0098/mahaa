@@ -48,7 +48,7 @@ from app.models.enums import (
     StoryStatus,
 )
 from tests.conftest import Account, assert_rejected
-from tests.test_p7_media import png_bytes
+from tests.test_p7_media import mp4_bytes, png_bytes
 
 #: Nobody's story. Only used where authentication or the id parse is the subject.
 NOBODY = str(uuid.UUID(int=0))
@@ -242,7 +242,13 @@ def test_the_empty_feed_is_the_fastapi_envelope(api_client, candidate) -> None:
 
 
 def test_a_story_is_created_with_the_servers_publisher(api_client, candidate) -> None:
-    """§10.1's shape, field for field, as the client's `mapStory` expects it."""
+    """§10.1's shape, field for field, as the client's `mapStory` expects it.
+
+    ``media`` / ``author_public_id`` / ``is_self`` are part of the contract now:
+    without ``media`` the viewer can never fetch the bytes an upload just stored,
+    and without ``author_public_id`` the home screen cannot group one person's
+    stories into a single circle.
+    """
     created = publish(api_client, candidate)
     assert set(created) == {
         "id",
@@ -253,6 +259,9 @@ def test_a_story_is_created_with_the_servers_publisher(api_client, candidate) ->
         "opportunity",
         "viewed",
         "created_at",
+        "media",
+        "author_public_id",
+        "is_self",
     }
     assert created["publisher"] == {
         "name": candidate.body["name"],
@@ -263,6 +272,87 @@ def test_a_story_is_created_with_the_servers_publisher(api_client, candidate) ->
     assert created["opportunity"] is None
     assert created["viewed"] is False
     assert created["status"] == "published"
+    assert created["media"] is None
+    assert created["author_public_id"] == candidate.body["public_id"]
+    # The publisher wrote it, so the publisher reading it back sees their own story.
+    assert created["is_self"] is True
+
+
+def test_a_media_story_round_trips_everything_the_player_needs(
+    api_client, candidate
+) -> None:
+    """The upload-to-playback pipeline, asserted on the wire.
+
+    The whole bug this exists for: an upload succeeded, the story row referenced
+    the asset, and the response carried no media at all — so a viewer had no URL
+    to hand a video player. Every field here is something the client's media
+    layer reads before it can play: `uri` to fetch the bytes, `kind`/`mime_type`
+    to pick the player, `size_bytes` for the loading state, dimensions when the
+    server derived them (null for video — no decoder in V1).
+    """
+    response = api_client.post(
+        "/api/v1/media?kind=video",
+        content=mp4_bytes(),
+        headers={**candidate.headers, "Content-Type": "video/mp4"},
+    )
+    assert response.status_code == 201, response.text
+    media_id = response.json()["id"]
+
+    created = publish(api_client, candidate, media_id=media_id)
+
+    media = created["media"]
+    assert set(media) == {
+        "id",
+        "kind",
+        "mime_type",
+        "width",
+        "height",
+        "duration_ms",
+        "size_bytes",
+        "uri",
+    }
+    assert media["id"] == media_id
+    assert media["kind"] == "video"
+    assert media["mime_type"] == "video/mp4"
+    # §11.4: no decoder ran, so the server must not invent dimensions or duration.
+    assert media["width"] is None and media["height"] is None
+    assert media["duration_ms"] is None
+    assert media["size_bytes"] == len(mp4_bytes())
+    # §14.11: a *relative path*, never a host — `absoluteMediaUri()` joins it.
+    assert media["uri"] == f"/api/v1/media/{media_id}"
+    assert not media["uri"].startswith("http")
+
+    # The list route must carry the same media as the create response: the home
+    # screen reads the list, not the create result.
+    listed = api_client.get(
+        "/api/v1/stories", headers=candidate.headers
+    ).json()["items"][0]
+    assert listed["media"] == media
+
+
+def test_is_self_is_computed_per_reader_and_the_public_id_is_shared(
+    api_client, candidate, other_candidate
+) -> None:
+    """One story, two readers: the author id is stable, `is_self` is not.
+
+    Grouping keys on `author_public_id`, so it must be identical for everyone
+    reading the row; `is_self` drives the Connect control, so it must flip for
+    the other account or you would see "Connected" to yourself.
+    """
+    created = publish(api_client, candidate)
+    author_public_id = created["author_public_id"]
+
+    seen_by_author = api_client.get(
+        f"/api/v1/stories/{created['id']}", headers=candidate.headers
+    ).json()
+    seen_by_other = api_client.get(
+        f"/api/v1/stories/{created['id']}", headers=other_candidate.headers
+    ).json()
+
+    assert seen_by_author["author_public_id"] == author_public_id
+    assert seen_by_other["author_public_id"] == author_public_id
+    assert seen_by_author["is_self"] is True
+    assert seen_by_other["is_self"] is False
 
 
 def test_the_publisher_payload_holds_only_display_fields(api_client, candidate) -> None:

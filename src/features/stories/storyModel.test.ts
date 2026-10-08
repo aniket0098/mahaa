@@ -24,6 +24,9 @@ function makeStory(overrides: Partial<Story> = {}): Story {
     opportunity: null,
     viewed: false,
     createdAt: new Date().toISOString(),
+    media: null,
+    authorPublicId: 'MJ-TESTAUTH',
+    isSelf: false,
     ...overrides,
   };
 }

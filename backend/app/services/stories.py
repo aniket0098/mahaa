@@ -58,6 +58,7 @@ from app.realtime import content_events
 from app.schemas.common import FastApiPage, build_fastapi_page
 from app.schemas.stories import (
     StoryCreate,
+    StoryMediaOut,
     StoryOpportunityOut,
     StoryOut,
     StoryPublisherOut,
@@ -189,7 +190,34 @@ def _viewed_ids(
     return set(rows.all())
 
 
-def _to_out(story: Story, publisher: StoryPublisherOut, viewed: bool) -> StoryOut:
+def _media_out(story: Story) -> StoryMediaOut | None:
+    """The asset this story carries, or ``None`` for a text-only story.
+
+    ``story.media`` is ``lazy="joined"`` on the model, so this reads an already-
+    loaded relationship rather than issuing a query per row — the list route
+    serialises a whole page through here.
+
+    ``uri`` is ``served_at``, the **relative** path §14.11 defines: the client
+    joins it onto its configured base itself, so no host is published here.
+    """
+    asset = story.media
+    if asset is None:
+        return None
+    return StoryMediaOut(
+        id=asset.id,
+        kind=asset.kind,
+        mime_type=asset.mime_type,
+        width=asset.width,
+        height=asset.height,
+        duration_ms=asset.duration_ms,
+        size_bytes=asset.size_bytes,
+        uri=asset.served_at,
+    )
+
+
+def _to_out(
+    story: Story, publisher: StoryPublisherOut, viewed: bool, viewer: User
+) -> StoryOut:
     """Serialise one story for one viewer.
 
     ``opportunity`` round-trips as the stored display payload when present, and is
@@ -197,6 +225,13 @@ def _to_out(story: Story, publisher: StoryPublisherOut, viewed: bool) -> StoryOu
     ``StoryOpportunityOut`` on the way out rather than passed through as a bare
     ``dict``, so a malformed payload cannot reach the client as an untyped object —
     the same choice posts made for its `project`/`achievement` round trip.
+
+    ``viewer`` is what makes ``is_self`` honest: it is compared against the row's
+    author per request, never carried on the row, for the same reason posts'
+    ``author.is_self`` is computed (§9.2). ``author_public_id`` comes from the
+    author's ``MJ-…`` public id — the identifier `GET /users/{public_id}` already
+    serves — so grouping a person's stories never has to reach into the publisher
+    snapshot, which deliberately carries no id.
     """
     opportunity: StoryOpportunityOut | None = None
     if story.opportunity:
@@ -210,6 +245,9 @@ def _to_out(story: Story, publisher: StoryPublisherOut, viewed: bool) -> StoryOu
         opportunity=opportunity,
         viewed=viewed,
         created_at=story.created_at,
+        media=_media_out(story),
+        author_public_id=story.author.public_id,
+        is_self=story.author_id == viewer.id,
     )
 
 
@@ -267,7 +305,10 @@ def list_stories(
 
     seen = _viewed_ids(session, viewer, [story.id for story in rows])
     return build_fastapi_page(
-        [_to_out(story, _publisher_out(story), story.id in seen) for story in rows],
+        [
+            _to_out(story, _publisher_out(story), story.id in seen, viewer)
+            for story in rows
+        ],
         total or 0,
         page,
         page_size,
@@ -295,7 +336,7 @@ def get_story(session: Session, viewer: User, raw_id: str) -> StoryOut:
         raise _not_found()
 
     seen = _viewed_ids(session, viewer, [story.id])
-    return _to_out(story, _publisher_out(story), story.id in seen)
+    return _to_out(story, _publisher_out(story), story.id in seen, viewer)
 
 
 def create_story(session: Session, principal: User, payload: StoryCreate) -> StoryOut:
@@ -364,7 +405,7 @@ def create_story(session: Session, principal: User, payload: StoryCreate) -> Sto
         author_id=str(story.author_id),
         created_at=wire_datetime(story.created_at),
     )
-    return _to_out(story, _publisher_out(story), False)
+    return _to_out(story, _publisher_out(story), False, principal)
 
 
 def delete_story(session: Session, principal: User, raw_id: str) -> None:

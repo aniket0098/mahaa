@@ -32,7 +32,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import StoryContentType, StoryPublisherKind, StoryStatus
+from app.models.enums import MediaKind, StoryContentType, StoryPublisherKind, StoryStatus
 
 #: §10.2's example window: "``created_at + interval '24h'``". Stored as an explicit
 #: `expires_at` so a per-story window is adjustable without a migration, which is
@@ -83,6 +83,42 @@ class StoryOpportunityOut(BaseModel):
     work_mode: str | None
 
 
+class StoryMediaOut(BaseModel):
+    """``media`` — the asset a story carries, or the story has none.
+
+    **This exists because the viewer cannot play what it is never given.** The
+    original V1 contract returned no media field at all, so a story whose upload
+    succeeded rendered as caption-only text: the bytes were stored, the row
+    referenced them, and no client could ever fetch them. That is the field the
+    upload-to-playback pipeline was missing.
+
+    The shape is :class:`app.schemas.posts.PostMediaOut` minus ``position`` — a
+    story holds at most one asset (§10.1), so a slot index would always be 0 and
+    a field that is always 0 is a claim of variability that does not exist.
+
+    ``uri`` is ``MediaAsset.served_at``: a **relative path** such as
+    ``/api/v1/media/{id}`` (§14.11) that the client joins onto its configured
+    base itself. Publishing a host here would hard-code an environment into the
+    wire and contradict §14.11 — the same reason `absoluteMediaUri()` exists.
+
+    ``duration_ms`` is nullable and **always null in V1** (no decoder; §11.4's
+    ``video_duration_enforced: false``). The field is typed so the client can
+    distinguish "unknown duration" from "no such field" rather than guessing.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: uuid.UUID
+    kind: MediaKind
+    mime_type: str
+    width: int | None
+    height: int | None
+    duration_ms: int | None
+    size_bytes: int
+    #: A relative path such as ``/api/v1/media/{id}`` (§14.11's `served_at`).
+    uri: str
+
+
 class StoryOut(BaseModel):
     """One story, as ``GET /stories`` and ``GET /stories/{id}`` return it.
 
@@ -102,6 +138,22 @@ class StoryOut(BaseModel):
     #: Per viewer. See the module docstring.
     viewed: bool
     created_at: datetime
+    #: The asset this story carries, or ``None`` for a text-only story. Without
+    #: this the upload-to-playback pipeline dead-ends server-side: the bytes
+    #: exist, the row points at them, and no client can ever ask for them.
+    media: StoryMediaOut | None
+    #: The author's **public** id (``MJ-…``) — the identifier `GET /users/{public_id}`
+    #: is already designed to receive, so publishing it here leaks nothing the
+    #: lookup route does not. It is deliberately *not* inside ``publisher``: the
+    #: publisher snapshot stays a three-field display payload (module docstring),
+    #: and grouping stories by person needs a stable per-author key the snapshot
+    #: intentionally refuses to carry.
+    author_public_id: str
+    #: Whether *this* viewer is the author, computed per request against the
+    #: authenticated principal — the same reason posts' ``author.is_self`` is a
+    #: response field and not a column. The client uses it to hide the Connect
+    #: control on your own story.
+    is_self: bool
 
 
 class StoryCreate(BaseModel):

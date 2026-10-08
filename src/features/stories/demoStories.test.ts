@@ -35,6 +35,9 @@ function makeRealStory(overrides: Partial<Story> = {}): Story {
     opportunity: { id: 'opp-1', title: 'Backend Intern', location: 'Pune', workMode: 'hybrid' },
     viewed: false,
     createdAt: NOW,
+    media: null,
+    authorPublicId: 'MJ-TESTAUTH',
+    isSelf: false,
     ...overrides,
   };
 }

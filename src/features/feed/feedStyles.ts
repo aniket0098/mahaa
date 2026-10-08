@@ -118,6 +118,119 @@ export const styles = StyleSheet.create({
     padding: spacing.md,
   },
 
+  /* --------------------------- immersive video stage -------------------------- */
+  /**
+   * The 9:16 full-bleed frame a video post renders into (Reels-style). The
+   * stage — not the card — owns the playback rectangle: its `onLayout` reports
+   * both the offset and the height the coordinator's slot needs, so autoplay
+   * keys on the video's real rectangle rather than the card's text block.
+   */
+  videoStage: {
+    aspectRatio: 9 / 16,
+    overflow: 'hidden',
+    position: 'relative' as const,
+    width: '100%',
+  },
+  /** Absolute inset used by the stage's player and its overlay layers. */
+  overlayFill: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
+  /** Top scrim: keeps the author row and the Connect pill legible on any frame. */
+  overlayScrimTop: { height: 140, left: 0, position: 'absolute', right: 0, top: 0 },
+  /** Bottom scrim: carries the caption and keeps the rail's counts readable. */
+  overlayScrimBottom: { bottom: 0, height: 300, left: 0, position: 'absolute', right: 0 },
+
+  /**
+   * The author row. `right` reserves the corner where the stage's own control
+   * cluster (more + mute, rendered by `PostVideo`) sits, so the name can never
+   * slide under those buttons however long it gets.
+   */
+  overlayTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    left: spacing.md,
+    position: 'absolute',
+    right: 112,
+    top: spacing.sm,
+  },
+  /** Identity tap target: avatar + name block, ≥44px as an inline secondary. */
+  overlayAuthor: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 44 },
+  overlayAuthorText: { flex: 1 },
+  overlayNameRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
+
+  /** The Connect pill: one shape, three tones, ≥48px as the card's primary action. */
+  overlayPill: {
+    alignItems: 'center',
+    borderRadius: radius.full,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  overlayPillConnect: { backgroundColor: colors.colorPrimary },
+  overlayPillPending: {
+    backgroundColor: colors.colorOverlay,
+    borderColor: colors.colorBorderStrong,
+    borderWidth: 1,
+  },
+  overlayPillDone: { backgroundColor: colors.colorSuccessSubtle },
+
+  /** The right action rail: 48×48 targets, 16px apart, clear of the caption. */
+  overlayRail: {
+    alignItems: 'center',
+    bottom: 96,
+    gap: spacing.lg,
+    position: 'absolute',
+    right: spacing.sm,
+  },
+  overlayRailAction: {
+    alignItems: 'center',
+    borderRadius: radius.full,
+    gap: 2,
+    justifyContent: 'center',
+    minHeight: 48,
+    width: 48,
+  },
+  /**
+   * Counts sit mid-frame where no scrim reaches, so they carry the overlay
+   * colour as a text shadow — the same 55% navy as the scrims, never a raw hex.
+   */
+  overlayRailCount: {
+    color: colors.colorTextOnPrimary,
+    textShadowColor: colors.colorOverlay,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  /** Bottom-left caption block. `right` keeps it clear of the action rail. */
+  overlayCaption: {
+    bottom: spacing.sm,
+    gap: spacing.xs,
+    left: spacing.md,
+    position: 'absolute',
+    right: 72,
+  },
+  overlayToggle: { color: colors.colorTextOnPrimary, minHeight: 32 },
+  overlayTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  /** The mixed-post entry to the image viewer: real media, real destination. */
+  photosPill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.colorOverlay,
+    borderRadius: radius.full,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+  },
+  /** The stage's overflow button, matching the player's own top-right controls. */
+  stageControl: {
+    alignItems: 'center',
+    backgroundColor: colors.colorOverlay,
+    borderRadius: radius.full,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+
   /* --------------------------- project / achievement -------------------------- */
   detailBlock: {
     backgroundColor: colors.colorBgMuted,

@@ -51,6 +51,28 @@ dist-*/
 /.metro*.log
 /.run-android*.log
 
+# Scratch logs and one-off diagnostic scripts written at the repo root during
+# verification runs. Root-anchored so only the top-level files match.
+/_*.log
+/_uvicorn_*.log
+/_diag_*.py
+/_parse_*.py
+
+# Environment backup snapshots. These have contained real credentials once
+# already — a file named like this must never enter the index.
+/._env*
+/.env.bak*
+
+# A malformed paste once created a file literally named
+# "s -ExecutionPolicy RemoteSigned) ; (& c:...Activate.ps1)" at the root.
+/s -ExecutionPolicy*
+
+# Device/E2E verification artifacts: seeded accounts carry JWT access tokens,
+# and the stage/e2e directories hold UI dumps, screenshots and clips.
+/.device-stage/
+/.e2e-media/
+/tools/.device-seed.json
+
 # Local Gradle and IDE state
 /.gradle/
 /.idea/

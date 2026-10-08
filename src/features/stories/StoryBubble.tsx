@@ -1,12 +1,21 @@
 /**
- * Story bubble — one publisher circle with a ring that carries the only state
- * the row has to communicate: unread (primary accent) or viewed (muted border).
+ * Story bubble — **one circle per person**, carrying the only state the row has
+ * to communicate: the group's ring.
  *
- * A demo story is drawn by the same component as a real one — the row never has
- * a second, parallel bubble — and is told apart by a visible DEMO chip, because
- * `verified` is always false for demo content and must never be borrowed to
- * mark it. The chip occupies a fixed slot either way, so adding it does not
- * shift the rest of the row.
+ * The bubble receives a {@link StoryGroup} (all of one author's stories), not a
+ * single story: three stories by one person must render as one circle, and the
+ * circle represents the whole group — tapping it opens the group.
+ *
+ * Ring rules, from `storyGroups.ts`:
+ * - group contains a `job` or `internship` story → **premium gold** ring;
+ * - every story in the group is viewed → the ring mutes (gold dims to
+ *   `ringPremiumViewed`, standard to `ringViewed`);
+ * - otherwise → MahaJob blue (`ringUnread`).
+ *
+ * A demo group is drawn by the same component as a real one and is told apart
+ * by a visible DEMO chip — never by borrowing `verified`, which is always false
+ * for demo content. The chip occupies a fixed slot either way, so adding it
+ * does not shift the rest of the row.
  */
 
 import { useCallback, useState } from 'react';
@@ -15,23 +24,24 @@ import { Animated, Pressable, Text, View } from 'react-native';
 import { AppIcon } from '@/components/ui/AppIcon';
 import { Avatar } from '@/components/ui/Avatar';
 import { colors } from '@/theme/tokens';
-import type { StoryItem } from '@/types/story';
 import { DEMO_STORY_BADGE, isDemoStory } from './demoStories';
+import { storyGroupRing, type StoryGroup } from './storyGroups';
 import { storyStyles } from './storyStyles';
 
 export interface StoryBubbleProps {
-  readonly story: StoryItem;
+  readonly group: StoryGroup;
   readonly onPress: () => void;
 }
 
-export function StoryBubble({ story, onPress }: StoryBubbleProps) {
+export function StoryBubble({ group, onPress }: StoryBubbleProps) {
   // A lazy state initialiser, not a ref: the animated value is read during
   // render, and reading a ref there is what the react-hooks lint rules forbid.
   const [scale] = useState(() => new Animated.Value(1));
 
-  const isViewed = story.viewed;
-  const isDemo = isDemoStory(story);
-  const isVerified = story.publisher.verified;
+  const isViewed = group.allViewed;
+  const ring = storyGroupRing(group);
+  const isDemo = group.stories.some(isDemoStory);
+  const isVerified = group.verified;
 
   // A press nudge, and nothing more: the row is scanned, not animated at.
   const animate = useCallback(
@@ -45,6 +55,18 @@ export function StoryBubble({ story, onPress }: StoryBubbleProps) {
     [scale],
   );
 
+  const ringStyle =
+    ring === 'premium'
+      ? isViewed
+        ? storyStyles.ringPremiumViewed
+        : storyStyles.ringPremium
+      : isViewed
+        ? storyStyles.ringViewed
+        : storyStyles.ringUnread;
+
+  const storyCount = group.stories.length;
+  const premium = ring === 'premium';
+
   return (
     <Pressable
       style={storyStyles.bubbleContainer}
@@ -52,22 +74,16 @@ export function StoryBubble({ story, onPress }: StoryBubbleProps) {
       onPressIn={() => animate(0.93)}
       onPressOut={() => animate(1)}
       accessibilityRole="button"
-      accessibilityLabel={`${story.publisher.name} story, ${isViewed ? 'viewed' : 'unread'}${
+      accessibilityLabel={`${group.name} stories, ${storyCount} ${
+        storyCount === 1 ? 'story' : 'stories'
+      }, ${isViewed ? 'viewed' : 'unread'}${premium ? ', includes a job or internship' : ''}${
         isDemo ? ', demo content' : ''
       }`}
-      accessibilityHint="Opens the full story">
+      accessibilityHint="Opens this person's stories">
       <Animated.View style={{ transform: [{ scale }] }}>
-        <View
-          style={[
-            storyStyles.ringContainer,
-            isViewed ? storyStyles.ringViewed : storyStyles.ringUnread,
-          ]}>
+        <View style={[storyStyles.ringContainer, ringStyle]}>
           <View style={storyStyles.avatarInner}>
-            <Avatar
-              src={story.publisher.logoUrl}
-              name={story.publisher.name}
-              size={56}
-            />
+            <Avatar src={group.logoUrl} name={group.name} size={56} />
           </View>
 
           {isVerified && (
@@ -88,7 +104,7 @@ export function StoryBubble({ story, onPress }: StoryBubbleProps) {
         style={[storyStyles.label, isViewed && storyStyles.labelViewed]}
         numberOfLines={1}
         ellipsizeMode="tail">
-        {story.publisher.name}
+        {group.name}
       </Text>
 
       {/* The slot is always reserved so every bubble in the row is the same

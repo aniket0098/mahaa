@@ -19,9 +19,16 @@
  *
  * **The controls are ours, not the platform's.** Owning play/pause/mute is what
  * makes the "only one video plays at a time" guarantee real.
+ *
+ * **Two variants, one lifecycle.** `band` (the default) is the boxed card
+ * player and is unchanged; `immersive` fills a 9:16 stage instead — cover
+ * crop, a full-frame tap-to-toggle with a paused badge, and the controls
+ * cluster moved to the top-right corner. The variant only changes *chrome*:
+ * registration, download, activation, and the coordinator contract are shared,
+ * which is exactly what `feedAutoplayWiring.test.ts` and `video.test.ts` pin.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
@@ -58,6 +65,19 @@ export interface PostVideoProps {
    * outcome the coordinator exists to prevent.
    */
   current?: boolean;
+  /**
+   * `band` (default) is the boxed card player inside the text flow — unchanged.
+   * `immersive` fills its 9:16 stage instead: `cover` crop, a full-frame
+   * tap-to-toggle, and the controls cluster anchored top-right.
+   */
+  variant?: 'band' | 'immersive';
+  /**
+   * An extra control rendered inside the player's controls row — the stage's
+   * `more_horiz` overflow button. It lives here so one cluster owns the
+   * top-right corner and the two controls can never overlap each other, and so
+   * the overflow stays reachable while the poster is still loading.
+   */
+  trailingControl?: ReactNode;
 }
 
 /** The slice of a player the coordinator is allowed to drive. */
@@ -66,7 +86,17 @@ interface PlayerApi {
   pause: () => void;
 }
 
-export function PostVideo({ uri, alt, height, postId, top, current = true }: PostVideoProps) {
+export function PostVideo({
+  uri,
+  alt,
+  height,
+  postId,
+  top,
+  current = true,
+  variant = 'band',
+  trailingControl,
+}: PostVideoProps) {
+  const immersive = variant === 'immersive';
   const [playable, setPlayable] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -220,7 +250,13 @@ export function PostVideo({ uri, alt, height, postId, top, current = true }: Pos
 
   if (failed) {
     return (
-      <View style={[styles.frame, { height }]} testID="feed-post-video-error">
+      <View
+        style={[styles.frame, immersive ? styles.fill : { height }]}
+        testID="feed-post-video-error">
+        {/* The overflow stays reachable even when the player has nothing to show. */}
+        {immersive && trailingControl ? (
+          <View style={styles.controlsStage}>{trailingControl}</View>
+        ) : null}
         <AppIcon
           name={{ ios: 'exclamationmark.triangle', android: 'warning' }}
           size={20}
@@ -251,6 +287,8 @@ export function PostVideo({ uri, alt, height, postId, top, current = true }: Pos
         alt={alt}
         height={height}
         playing={playing}
+        immersive={immersive}
+        trailingControl={trailingControl}
         onToggle={toggle}
         onAttach={attachPlayer}
         onRetry={() => {
@@ -274,8 +312,11 @@ export function PostVideo({ uri, alt, height, postId, top, current = true }: Pos
       accessibilityState={{ busy: loading }}
       disabled={loading}
       onPress={load}
-      style={[styles.frame, { height }]}
+      style={[styles.frame, immersive ? styles.fill : { height }]}
       testID="feed-post-video-poster">
+      {immersive && trailingControl ? (
+        <View style={styles.controlsStage}>{trailingControl}</View>
+      ) : null}
       <View style={styles.playCircle}>
         {loading ? (
           <View style={styles.spinner} />
@@ -310,6 +351,8 @@ function VideoSurface({
   alt,
   height,
   playing,
+  immersive,
+  trailingControl,
   onToggle,
   onAttach,
   onRetry,
@@ -318,6 +361,8 @@ function VideoSurface({
   alt: string;
   height: number;
   playing: boolean;
+  immersive: boolean;
+  trailingControl?: ReactNode;
   onToggle: () => void;
   onAttach: (api: PlayerApi | null) => void;
   onRetry: () => void;
@@ -362,38 +407,67 @@ function VideoSurface({
   }, [player]);
 
   return (
-    <View style={[styles.frame, { height }]} testID="feed-post-video">
+    <View
+      style={[styles.frame, immersive ? styles.fill : { height }]}
+      testID="feed-post-video">
       {/* Pointer events are off so the controls below stay reachable. */}
       <View style={styles.player} pointerEvents="none">
         <VideoView
           player={player}
           style={styles.playerInner}
-          contentFit="contain"
+          contentFit={immersive ? 'cover' : 'contain'}
           nativeControls={false}
           accessibilityLabel={alt}
           testID="feed-post-video-view"
         />
       </View>
 
-      <View style={styles.controls}>
+      {/* Immersive: the whole stage is the play/pause target, Reels-style — but
+          only where the overlay above does not capture the touch itself. */}
+      {immersive ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={playing ? 'Pause video' : 'Play video'}
           accessibilityState={{ selected: playing }}
           onPress={onToggle}
-          hitSlop={8}
-          style={styles.controlButton}
-          testID="feed-post-video-toggle">
-          <AppIcon
-            name={
-              playing
-                ? { ios: 'pause.fill', android: 'pause' }
-                : { ios: 'play.fill', android: 'play_arrow' }
-            }
-            size={20}
-            color={colors.colorTextOnPrimary}
-          />
+          style={styles.stageTap}
+          testID="feed-post-video-stage-toggle">
+          {playing ? null : (
+            <View style={styles.pausedBadge}>
+              <AppIcon
+                name={{ ios: 'play.fill', android: 'play_arrow' }}
+                size={30}
+                color={colors.colorTextOnPrimary}
+              />
+            </View>
+          )}
         </Pressable>
+      ) : null}
+
+      <View style={immersive ? styles.controlsStage : styles.controls}>
+        {trailingControl}
+        {/* Band keeps its explicit pause button; immersive drives that from the
+            center of the stage instead, so only more + mute sit in the corner. */}
+        {immersive ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause video' : 'Play video'}
+            accessibilityState={{ selected: playing }}
+            onPress={onToggle}
+            hitSlop={8}
+            style={styles.controlButton}
+            testID="feed-post-video-toggle">
+            <AppIcon
+              name={
+                playing
+                  ? { ios: 'pause.fill', android: 'pause' }
+                  : { ios: 'play.fill', android: 'play_arrow' }
+              }
+              size={20}
+              color={colors.colorTextOnPrimary}
+            />
+          </Pressable>
+        )}
 
         <Pressable
           accessibilityRole="button"
@@ -512,5 +586,39 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     width: 40,
+  },
+  /** Absolute-fill frame: the immersive variant takes its size from the stage. */
+  fill: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
+  /**
+   * Center tap target filling the whole stage — no visible chrome of its own.
+   * Absolute, because the frame centers its children rather than stretching
+   * them, and a shrink-wrapped target would leave most of the video untappable.
+   */
+  stageTap: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  /** The paused marker at the center of an immersive stage. */
+  pausedBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.colorOverlay,
+    borderRadius: radius.full,
+    height: 64,
+    justifyContent: 'center',
+    width: 64,
+  },
+  /** Top-right corner cluster (more + mute); the band uses bottom-right instead. */
+  controlsStage: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    position: 'absolute',
+    right: spacing.sm,
+    top: spacing.sm,
   },
 });

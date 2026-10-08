@@ -33,6 +33,18 @@ interface RawStory {
   } | null;
   readonly viewed: boolean;
   readonly created_at: string;
+  readonly media: {
+    readonly id: string;
+    readonly kind: 'image' | 'video';
+    readonly mime_type: string;
+    readonly width: number | null;
+    readonly height: number | null;
+    readonly duration_ms: number | null;
+    readonly size_bytes: number;
+    readonly uri: string;
+  } | null;
+  readonly author_public_id: string;
+  readonly is_self: boolean;
 }
 
 interface RawStoryViewResponse {
@@ -64,6 +76,22 @@ function mapStory(raw: RawStory): Story {
       : null,
     viewed: raw.viewed,
     createdAt: raw.created_at,
+    // `uri` is the server's relative `served_at`; the media layer joins it onto
+    // the configured base before anything fetches it (never a hardcoded host).
+    media: raw.media
+      ? {
+          id: raw.media.id,
+          kind: raw.media.kind,
+          mimeType: raw.media.mime_type,
+          width: raw.media.width,
+          height: raw.media.height,
+          durationMs: raw.media.duration_ms,
+          sizeBytes: raw.media.size_bytes,
+          uri: raw.media.uri,
+        }
+      : null,
+    authorPublicId: raw.author_public_id,
+    isSelf: raw.is_self,
   };
 }
 

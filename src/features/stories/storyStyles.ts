@@ -39,6 +39,21 @@ export const storyStyles = StyleSheet.create({
   ringViewed: {
     borderColor: colors.colorBorder,
   },
+  /**
+   * The premium ring: a job or internship story in the group. The extra width
+   * (3 rather than 2.5) plus the gold token is what reads as "premium" at
+   * circle size — a colour change alone disappears against the blue at 2.5.
+   */
+  ringPremium: {
+    borderColor: colors.colorStoryPremium,
+    borderWidth: 3,
+  },
+  /** A premium group that is already viewed: gold, but held back from shouting. */
+  ringPremiumViewed: {
+    borderColor: colors.colorStoryPremiumBright,
+    borderWidth: 3,
+    opacity: 0.55,
+  },
   avatarInner: {
     width: 58,
     height: 58,
