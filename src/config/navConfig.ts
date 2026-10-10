@@ -48,10 +48,10 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
   {
     name: 'jobs',
     path: '/jobs',
-    label: 'Jobs',
+    label: 'Discover',
     icon: { ios: 'briefcase.fill', android: 'work' },
     iconOutline: { ios: 'briefcase', android: 'work_outline' },
-    implemented: false,
+    implemented: true,
   },
   {
     name: 'messages',

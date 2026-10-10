@@ -1,19 +1,16 @@
 /**
- * Jobs tab — opportunity discovery.
+ * Discover — the candidate opportunity screen (the `/jobs` tab).
  *
- * The API has no opportunities router, so this screen states that plainly
- * instead of rendering invented listings. The notice names the endpoint that
- * will back it, so the screen documents itself.
+ * This was a `StageScreen` placeholder; it is now the real thing. The route,
+ * tab label ("Discover"), icon and position are unchanged. The screen itself
+ * is now a thin delegate: the pinned title + search header and the paged feed
+ * both live in `@/features/jobs/OpportunityList`, which reads the real
+ * `GET /opportunities` through the central client. Nothing here invents a
+ * listing, a count, or a filter the backend does not serve.
  */
-import { StageScreen } from '@/features/stages/StageScreen';
+
+import { OpportunityList } from '@/features/jobs/OpportunityList';
 
 export default function CandidateJobsScreen() {
-  return (
-    <StageScreen
-      title="Job discovery"
-      description="Published opportunities with search, filters, and an explained match score will live here."
-      stage="Stage 6 — opportunities"
-      nextStep="The API has no /opportunities router yet. When it does, this screen reads it directly; no other change is needed here."
-    />
-  );
+  return <OpportunityList />;
 }
