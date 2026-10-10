@@ -118,3 +118,38 @@ def conversation_read(
             },
         )
     )
+
+
+def message_updated(
+    *,
+    recipient_user_id: str,
+    message_id: str,
+    conversation_id: str,
+    sender_user_id: str,
+    edited_at: str,
+    body: str,
+) -> None:
+    """Announce that a stored message was edited, to the **other** member.
+
+    Call this **after** ``session.commit()``.
+
+    The payload mirrors :func:`message_created` minus the fields an edit cannot
+    change, so a client can share one "replace this bubble" code path between
+    the two events. ``recipient_user_id`` is derived from the conversation's
+    membership by the service, never from the request — and it is deliberately
+    *not* the editor, whose own device already holds the canonical message the
+    REST response returned.
+    """
+    _publish(
+        RealtimeEvent(
+            event_type=EventType.MESSAGE_UPDATED,
+            recipient_user_id=recipient_user_id,
+            payload={
+                "message_id": message_id,
+                "conversation_id": conversation_id,
+                "sender_user_id": sender_user_id,
+                "edited_at": edited_at,
+                "body": body,
+            },
+        )
+    )

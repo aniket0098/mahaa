@@ -508,12 +508,4 @@ def record_view(session: Session, principal: User, raw_id: str) -> StoryViewOut:
         already_recorded=False,
         viewed_at=view.viewed_at,
     )
-    story_id = parse_id(raw_id, "story")
-    story = session.get(Story, story_id)
-    if story is None or story.author_id != principal.id:
-        # 404 rather than 403: a 403 would confirm the story exists, which is the
-        # same non-disclosure rule posts applies in `_assert_owner`.
-        raise _not_found()
 
-    session.delete(story)
-    session.commit()

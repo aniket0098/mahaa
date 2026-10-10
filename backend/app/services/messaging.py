@@ -62,6 +62,7 @@ from app.schemas.messaging import (
     MessageCreate,
     MessagePage,
     MessageRead,
+    MessageUpdate,
 )
 from app.schemas.users import UserSummary
 from app.services import notifications, push
@@ -912,3 +913,90 @@ def soft_delete(session: Session, viewer: User, raw_id: str) -> None:
     message.deleted_by = viewer.id
     session.add(message)
     session.commit()
+
+
+def edit(
+    session: Session, viewer: User, raw_id: str, payload: MessageUpdate
+) -> MessageRead:
+    """``PATCH /messages/{message_id}`` — rewrite the text of **my own** message.
+
+    Four rules, each stated in the place that enforces it:
+
+    * **Author only, answered with a 404.** A non-member, a member who is not
+      the sender, and an unknown id all receive the same "not found" — the same
+      anti-enumeration trade :func:`soft_delete` makes, for the same reason: a
+      distinct "you are not the author" would confirm a message exists in a
+      thread the caller has no business probing.
+    * **A tombstone is final.** A deleted message keeps its slot with no body
+      (§14.6); re-attaching text to it would resurrect content both participants
+      chose to remove, so an edit of a deleted message is a 404 as well.
+    * **Identical text is a no-op.** ``edited_at`` is a claim that the content
+      changed, and stamping it when it did not would make every client render a
+      misleading "Edited" label off a double-tapped Save. The stored row is
+      returned untouched.
+    * **The server stamps the time.** ``payload`` cannot carry ``edited_at`` —
+      ``extra="forbid"`` refuses it with a 422 — and the value written here is
+      the only clock that matters.
+
+    ``client_message_id`` and ``created_at`` are never touched: an edit rewrites
+    text, not identity or ordering, so ids and positions stay stable in every
+    thread that already holds the message.
+    """
+
+    message_id = parse_id(raw_id, "message")
+    message = session.scalar(
+        select(Message)
+        .options(
+            selectinload(Message.sender),
+            selectinload(Message.conversation).selectinload(
+                Conversation.members
+            ),
+        )
+        .where(Message.id == message_id)
+    )
+    if message is None:
+        raise _message_not_found()
+
+    member = session.scalar(
+        select(ConversationMember).where(
+            ConversationMember.conversation_id == message.conversation_id,
+            ConversationMember.user_id == viewer.id,
+        )
+    )
+    if member is None or message.sender_id != viewer.id:
+        raise _message_not_found()
+
+    if message.deleted_at is not None:
+        raise _message_not_found()
+
+    if message.body == payload.body:
+        # Nothing changed: no commit, no event, no second "Edited" label.
+        return message_read(message, session)
+
+    message.body = payload.body
+    message.edited_at = _now()
+    session.add(message)
+    session.commit()
+    session.refresh(message)
+
+    # Phase 14 realtime: only after the commit, and only when the text actually
+    # changed (the no-op arm above returned already). The audience is the other
+    # member, derived from the conversation's own membership rows — the editor
+    # hears nothing because their device holds the canonical row the REST
+    # response is about to return.
+    recipients = [
+        other.user_id
+        for other in _sorted_members(message.conversation)
+        if other.user_id != viewer.id
+    ]
+    for recipient in recipients:
+        messaging_events.message_updated(
+            recipient_user_id=str(recipient),
+            message_id=str(message.id),
+            conversation_id=str(message.conversation_id),
+            sender_user_id=str(message.sender_id),
+            edited_at=message.edited_at.isoformat(),
+            body=message.body,
+        )
+
+    return message_read(message, session)

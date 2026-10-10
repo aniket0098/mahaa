@@ -88,6 +88,29 @@ class MessageCreate(BaseModel):
         if not value.strip():
             raise ValueError(_NO_CONTENT_MESSAGE)
         return value
+
+
+class MessageUpdate(BaseModel):
+    """``PATCH /messages/{message_id}`` — the new text, and nothing else.
+
+    There is no ``sender_id``, no ``conversation_id`` and no ``edited_at``: the
+    server derives all three from the stored row and the authenticated caller.
+    ``extra="forbid"`` turns a client that tries to supply them into a 422
+    instead of a privilege escalation, exactly as ``MessageCreate`` does.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=MESSAGE_BODY_MAX)
+
+    @field_validator("body")
+    @classmethod
+    def _body_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(_NO_CONTENT_MESSAGE)
+        return value
+
+
 class MarkReadRequest(BaseModel):
     """``POST /conversations/{id}/read`` — body is exactly ``{message_id}``.
 

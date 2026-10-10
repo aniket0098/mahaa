@@ -41,6 +41,7 @@ from app.schemas.messaging import (
     MessageCreate,
     MessagePage,
     MessageRead,
+    MessageUpdate,
 )
 from app.services import messaging as svc
 from app.services.messaging import (
@@ -210,3 +211,27 @@ def delete_message(
 
     svc.soft_delete(session, current_user, message_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch(
+    "/messages/{message_id}",
+    response_model=MessageRead,
+    summary="Edit my own message",
+)
+def update_message(
+    message_id: str,
+    payload: MessageUpdate,
+    current_user: CurrentUser,
+    session: DbSession,
+) -> MessageRead:
+    """Rewrite the text of a message the **authenticated caller** authored.
+
+    The body has no author field and ``extra="forbid"``, so a client cannot
+    name a different sender or stamp its own ``edited_at`` even by accident.
+    A non-author, a non-member and an unknown id all read back as the same 404
+    (anti-enumeration, matching ``DELETE /messages/{id}``); a deleted message
+    is equally final and answers the same way. Identical text is a no-op that
+    returns the stored row without moving ``edited_at``.
+    """
+
+    return svc.edit(session, current_user, message_id, payload)

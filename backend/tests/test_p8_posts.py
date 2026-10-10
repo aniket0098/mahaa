@@ -773,6 +773,67 @@ def test_a_stranger_cannot_delete_someone_elses_post(
     assert _rows(api_client)[0].deleted_at is None
 
 
+def test_deleting_a_malformed_id_is_404_not_a_422(api_client, candidate) -> None:
+    """DELETE is held to the same no-UUID-oracle rule as the read routes.
+
+    A 422 would confirm the string was *supposed* to be a UUID — the exact
+    oracle ``parse_id`` exists to refuse. The mobile client sends a path built
+    from a stored id, so a malformed one means the link is bad, not the format.
+    """
+    for raw in ("not-a-uuid", "12345", "null", "0000"):
+        response = api_client.delete(f"/api/v1/posts/{raw}", headers=candidate.headers)
+        assert response.status_code == 404, (raw, response.text)
+        assert response.json()["error"]["code"] == "not_found"
+
+
+def upload_video(api_client, account: Account) -> str:
+    """A real MP4 uploaded through the real route; returns its id."""
+    response = api_client.post(
+        "/api/v1/media?kind=video",
+        content=mp4_bytes(),
+        headers={**account.headers, "Content-Type": "video/mp4"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def test_an_image_post_deletes_and_leaves_both_feeds(api_client, candidate) -> None:
+    """The common case: an image post is tombstoned and leaves both lists."""
+    media_id = upload_image(api_client, candidate)
+    created = publish(api_client, candidate, media_ids=[media_id])
+    assert created["kind"] == "image"
+
+    assert delete(api_client, candidate, created["id"]).status_code == 204
+    assert feed(api_client, candidate)["total"] == 0
+    assert feed(api_client, candidate, "/api/v1/posts/mine")["total"] == 0
+
+
+def test_a_video_post_deletes_like_any_other(api_client, candidate) -> None:
+    """A video post stages its media on the feed; the tombstone hides it all."""
+    media_id = upload_video(api_client, candidate)
+    created = publish(api_client, candidate, kind="video", media_ids=[media_id])
+    assert created["kind"] == "video"
+
+    assert delete(api_client, candidate, created["id"]).status_code == 204
+    assert feed(api_client, candidate)["total"] == 0
+    assert _rows(api_client)[0].deleted_at is not None
+
+
+def test_a_project_post_deletes_like_any_other(api_client, candidate) -> None:
+    """A project showcase carries a JSON payload instead of media; same rule."""
+    created = publish(
+        api_client,
+        candidate,
+        kind="project",
+        category="projects",
+        project={"title": "Campus Connect", "description": "A listings board."},
+    )
+    assert created["kind"] == "project"
+
+    assert delete(api_client, candidate, created["id"]).status_code == 204
+    assert feed(api_client, candidate)["total"] == 0
+    assert feed(api_client, candidate, "/api/v1/posts/mine")["total"] == 0
+
 # --- media deletion is reference-checked (§14.11) -----------------------------
 
 

@@ -911,6 +911,25 @@ def test_deleting_twice_is_404(api_client, candidate) -> None:
     assert drop(api_client, candidate, "not-a-uuid").status_code == 404
 
 
+def test_a_deleted_story_leaves_the_list_and_the_detail_route(
+    api_client, candidate
+) -> None:
+    """The Home tray refills from ``GET /stories`` after every mutation.
+
+    A deleted story must be absent from that response *and* from its own detail
+    route: the client keeps no story store of its own, so a row the server still
+    returned would put the bubble straight back on the next refresh — the ghost
+    this suite exists to prevent.
+    """
+    story = seed_story(api_client, candidate)
+    before = feed(api_client, candidate)
+    assert [row["id"] for row in before["items"]] == [str(story.id)]
+
+    assert drop(api_client, candidate, story.id).status_code == 204
+    assert feed(api_client, candidate)["total"] == 0
+    detail = api_client.get(f"/api/v1/stories/{story.id}", headers=candidate.headers)
+    assert detail.status_code == 404, detail.text
+
 # --- the database enforces its half (§14.10) -----------------------------------
 #
 # The rules above are the service's. These are PostgreSQL's, and they are the ones

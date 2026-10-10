@@ -71,6 +71,12 @@ class EventType:
     #: pointer commits. Both are *notifications that something already
     #: persisted*, never a carrier for state the client must trust.
     MESSAGE_CREATED = "message.created"
+    #: Phase 14 — editing. Published **after** the edit transaction commits, to the
+    #: *other* member only (the editor's own device already holds the canonical
+    #: message from the REST response). The payload carries the new body and the
+    #: server-stamped ``edited_at``; ``message_id`` lets a client replace its
+    #: cached bubble in place, keeping ids and ordering stable.
+    MESSAGE_UPDATED = "message.updated"
     CONVERSATION_READ = "conversation.read"
 
     #: Phase 3 — notifications. Published only after the transaction that
@@ -102,6 +108,7 @@ KNOWN_EVENT_TYPES: frozenset[str] = frozenset(
         EventType.SYSTEM_PING,
         EventType.SYSTEM_ERROR,
         EventType.MESSAGE_CREATED,
+        EventType.MESSAGE_UPDATED,
         EventType.CONVERSATION_READ,
         EventType.NOTIFICATION_CREATED,
         EventType.POST_CREATED,
