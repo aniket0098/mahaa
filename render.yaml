@@ -56,3 +56,75 @@ services:
       # sends no Origin header.
       - key: CORS_ORIGINS
         sync: false
+
+  # ---------------------------------------------------------------------------
+  # Message service (message-docker-service) — added for the Docker-first
+  # message-service deployment preparation. The backend block above is
+  # untouched; this block only ADDS a second web service in the same Blueprint.
+  #
+  # Build context notes (Render builds from the repository root):
+  #   rootDir:        message-service   (build context = that directory)
+  #   dockerfilePath: Dockerfile        (message-service/Dockerfile)
+  # The image copies only message-service/app, alembic, alembic.ini,
+  # pyproject.toml and requirements.txt — never backend/ or any .env file.
+  #
+  # Health: liveness GET /api/v1/health (never touches the database).
+  # Readiness GET /api/v1/ready exists for operators but is NOT the Render
+  # health check, for the same reason as the backend (see above).
+  #
+  # Database: the same Neon PostgreSQL the backend uses (managed outside
+  # Render). No Render Postgres resource is created here. The message service
+  # owns ONLY the message_requests table (FK to backend-owned users); run its
+  # Alembic migration explicitly after pointing DATABASE_URL at Neon — never
+  # automatically at startup, never against production without a backup and
+  # owner approval (see message-service/docs/DOCKER_RENDER_DEPLOYMENT.md).
+  #
+  # Attachments: none in this service (REST-only, no file/object storage, no
+  # container-local persistence). Nothing to provision.
+  #
+  # Auth: the mobile app signs in once against mahaa-backend-docker and sends
+  # the same bearer token here, so JWT_SECRET / JWT_ISSUER / JWT_AUDIENCE MUST
+  # be byte-identical to mahaa-backend-docker's values. They are sync: false
+  # below — copy them in the dashboard, never into this file.
+  #
+  # Public URL placeholder: https://message-docker-service.onrender.com
+  # (Render assigns the real host). The mobile app targets it with
+  # EXPO_PUBLIC_MESSAGE_API_BASE_URL=<that host>/api/v1 — no code change.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: message-docker-service
+    runtime: docker
+    region: singapore
+    plan: free
+    rootDir: message-service
+    dockerfilePath: Dockerfile
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PORT
+        value: "8001"
+
+      # `production` enables the fail-closed checks in
+      # message-service/app/core/config.py: refuses placeholder DATABASE_URL,
+      # placeholder/short JWT_SECRET, DEBUG=true, or wildcard CORS.
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+
+      # Same Neon PostgreSQL as the backend. Set once in the dashboard.
+      - key: DATABASE_URL
+        sync: false
+
+      # Shared-credential auth with the backend — copy the EXACT values from
+      # mahaa-backend-docker in the dashboard.
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_ISSUER
+        sync: false
+      - key: JWT_AUDIENCE
+        sync: false
+
+      # Exact origins, comma separated, never '*'. Empty is correct for a
+      # mobile-only client (it sends no Origin header).
+      - key: CORS_ORIGINS
+        sync: false

@@ -1,0 +1,14 @@
+# Mahaa Message service — development and test dependencies.
+#
+# For a local checkout only. The Dockerfile installs `requirements.txt` (runtime
+# only); this file adds the two extras the test suite needs, plus the runtime
+# list via `-r` so one install is enough:
+#
+#   python -m pip install -r requirements-dev.txt
+#
+# Nothing here ever enters the production image.
+
+-r requirements.txt
+
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0

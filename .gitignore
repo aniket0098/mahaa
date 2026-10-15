@@ -122,3 +122,49 @@ example
 # generated native folders
 /ios
 /android
+
+# ---------------------------------------------------------------------------
+# Release staging hygiene (additive rules; nothing above was deleted).
+#
+# backend/.gitignore was left empty in the working tree, so the Python venv,
+# bytecode caches and scratch files under backend/ would otherwise be staged
+# by a naive `git add -A`. These unanchored rules restore that protection for
+# the whole repository (they also cover message-service's caches, which that
+# service's own .gitignore already lists independently).
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Root-level verification/scratch artifacts. Names, not broad wildcards,
+# wherever a wildcard could reach a real source file. Never part of a release.
+/.tsc_out.txt
+/apk-probe-bundle.js
+/metro.log
+/mt.txt
+/exp.txt
+/*.stackdump
+/_injector
+/_p*.diff
+/_p*.ps1
+/_p*.py
+/_phase25_plan.md
+/_run_*.bat
+/_uinput_inject.c
+/ui*.xml
+/ui*.txt
+/uih*.xml
+/.vscode/
+
+# One-off diagnostic scripts and dumps at the backend root (kept locally,
+# never staged). Root-anchored so a future real file is still visible.
+/backend/_*
+
+# Device/UI verification dumps under docs/
+/docs/p22_*
+/docs/phase26-evidence/

@@ -1,0 +1,41 @@
+# Mahaa Message service — what never enters the build context.
+#
+# The build context is this directory, so nothing outside it can be copied at
+# all; this file is the second line of defence for what is *inside* it.
+
+# Credentials. `DATABASE_URL` and `JWT_SECRET` arrive as environment variables
+# at run time — never as a file in an image layer.
+.env
+.env.*
+!.env.example
+
+# Python artefacts and tool caches.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Tests are run from the source tree or CI, not from an image layer.
+tests/
+
+# Source control and CI metadata — a git history in an image is a liability
+# with no operational benefit.
+.git/
+.gitignore
+
+# Local Compose configuration and scratch logs — developer-machine only.
+docker-compose*.yml
+docker-compose*.yaml
+*.log
+_*
+.env.bak*
+._*
+
+# Editor/OS noise.
+.vscode/
+.idea/
+.DS_Store
+*.md
+!README.md

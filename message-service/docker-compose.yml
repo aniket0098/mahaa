@@ -1,0 +1,130 @@
+# =============================================================================
+# Mahaa Message service — local development stack.
+#
+#   db (healthy) --> app        (app never migrates; see `migrate` below)
+#
+# LOCAL ONLY. Every value is `${VAR:-safe-local-default}`, so the stack starts
+# with throwaway local credentials and nothing else. Nothing here points at the
+# production/Neon database, and DATABASE_URL is set explicitly to the Compose
+# service DNS name `db` so a stray DATABASE_URL in a local .env can never make
+# this container reach anything but its own isolated database.
+#
+# Ports:
+#   app  ->  http://localhost:${MESSAGE_SERVICE_PORT:-8001}
+#   db   ->  127.0.0.1:${MSGSVC_PG_HOST_PORT:-5435}  (loopback only, so
+#             migrations can be applied from the host; never 0.0.0.0)
+#
+# --- run it -------------------------------------------------------------------
+#   docker compose up --build          # db + app, both healthy
+#   docker compose --profile migrate run --rm migrate   # apply schema (manual)
+#
+# Migrations are NEVER run automatically. This service owns only the
+# `message_requests` table, but that table's foreign keys reference `users`,
+# which belongs to the main backend. So a brand-new local database must be
+# prepared in this order, both from the host and both against the local DB on
+# 127.0.0.1:5435:
+#
+#   1. backend migrations      (creates `users` and the rest of the app schema)
+#      cd backend
+#      DATABASE_URL=postgresql+psycopg://msgsvc:msgsvc_local_dev@127.0.0.1:5435/msgsvc \
+#        alembic upgrade head
+#   2. this service's migration (creates `message_requests`)
+#      cd message-service
+#      DATABASE_URL=postgresql+psycopg://msgsvc:msgsvc_local_dev@127.0.0.1:5435/msgsvc \
+#        alembic upgrade head
+#
+# For a containerised run of the two migrations instead, `migrate` runs this
+# service's own migration; run the backend's migrations first from the host as
+# above (the backend is a separate build context and is out of scope here).
+# =============================================================================
+
+services:
+  # Isolated local PostgreSQL. Nothing but this stack writes to it, and its
+  # data lives in a named volume (local test rows only — see `volumes`).
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-msgsvc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-msgsvc_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-msgsvc}
+    volumes:
+      - msgsvc_pgdata:/var/lib/postgresql/data
+    ports:
+      # Loopback only: host-side migrations and psql need to reach it, but it
+      # is never published on 0.0.0.0. 5435 because this machine already runs
+      # PostgreSQL on 5432/5433 and the root stack on 5434.
+      - "127.0.0.1:${MSGSVC_PG_HOST_PORT:-5435}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Configurable app port; default keeps it off the root API's 8000. The
+    # container always listens on 8001 (see Dockerfile ENV), so only the host
+    # side changes here.
+    ports:
+      - "${MESSAGE_SERVICE_PORT:-8001}:8001"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-false}
+      # Explicit local DSN to the Compose `db` service. Deliberately not
+      # `${DATABASE_URL:-...}`: a local .env DATABASE_URL must never be able to
+      # point this stack anywhere but its own isolated database.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-msgsvc}:${POSTGRES_PASSWORD:-msgsvc_local_dev}@db:5432/${POSTGRES_DB:-msgsvc}
+      # Local development placeholder. APP_ENV=production refuses to boot with
+      # it — the intended behaviour. Override from the shell for a real run.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
+      JWT_ISSUER: ${JWT_ISSUER:-mahaa-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-mahaa-mobile}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/api/v1/health', timeout=3).status==200 else 1)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
+    # Docker's init (tini) as PID 1: reaps zombies and forwards SIGTERM to
+    # uvicorn, so `docker stop` shuts the app down gracefully (exit 0) instead
+    # of being SIGKILLed after the stop timeout (exit 137). Complements the
+    # `exec` in the Dockerfile CMD.
+    init: true
+    restart: unless-stopped
+
+  # One-shot schema migration. MANUAL ONLY — it is behind a Compose profile so
+  # `docker compose up` never triggers it, and it depends on the backend's
+  # `users` table existing (see the header). Same image as the app, so the
+  # schema is built by the exact code that serves it.
+  migrate:
+    profiles: ["migrate"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-msgsvc}:${POSTGRES_PASSWORD:-msgsvc_local_dev}@db:5432/${POSTGRES_DB:-msgsvc}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  # Retains only the local, throwaway development data (message-request rows
+  # created by manual testing) across `docker compose down`. It is not a backup
+  # and never touches production. `docker compose down -v` removes it.
+  msgsvc_pgdata:

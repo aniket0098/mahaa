@@ -1,0 +1,28 @@
+# Mahaa Message service — local files that must never be committed.
+#
+# Scoped to this service on purpose: the repository root `.gitignore` is shared
+# with everything else, and a real `.env` here holds `DATABASE_URL` and
+# `JWT_SECRET`. `.env.example` (non-secret names and safe local defaults) IS
+# committed; only the filled-in copies are ignored.
+
+.env
+.env.*
+!.env.example
+
+# Local Compose overrides and scratch captures.
+docker-compose.override.yml
+docker-compose.override.yaml
+docker-compose.*.local.yml
+*.log
+_*
+.env.bak*
+._*
+
+# Python and tooling artefacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.mypy_cache/
