@@ -3,15 +3,19 @@
 The contract is short and the rule inside it is asymmetric, so the tests are grouped
 around the two halves of that rule rather than around the endpoint:
 
-* a **name** only reaches an account whose owner turned ``discoverable`` on; and
+* a **name** only reaches an account whose owner has ``discoverable`` on; and
 * an exact **handle** or **public id** resolves regardless.
 
 Both come from spec §5.2 in one line. The asymmetry is the whole point — it is what
 stops "type a name" from being a way to harvest every account on the platform.
 
-``discoverable`` defaults to **false**, so the default state of a brand-new account
-is *invisible to a name search but findable by handle*. Several tests below pin that
-default, because "invisible" is the behaviour that has to keep holding.
+**Phase 23 changed the default.** ``discoverable`` now defaults to **true**
+(opt-out) and the privacy row is created eagerly at signup, so the default state
+of a brand-new account is *findable by name*, the way a professional network
+makes an account visible until its owner turns it off. Tests below that used to
+pin "invisible by default" now set an explicit opt-out (``discoverable=False``)
+to exercise the strict half of the rule. An account with no privacy row at all is
+still not discoverable by name — the conservative answer, unchanged.
 """
 
 from __future__ import annotations
@@ -163,14 +167,53 @@ def test_a_name_search_is_case_insensitive(
         ], term
 
 
-def test_a_private_account_is_invisible_to_a_name_search(
+def test_a_freshly_registered_account_is_discoverable_by_name(
     api_client, candidate, other_candidate
 ) -> None:
-    """The default. ``discoverable`` is false, so a name search finds nobody.
+    """Phase 23's fix: a brand-new account is findable by name out of the box.
 
-    No privacy row is created at all here — the absence *is* the test, because a
-    user who has never opened their profile must not be findable by name.
+    ``other_candidate`` signed up through the real endpoint, which now creates a
+    privacy row with ``discoverable = true`` (opt-out). No manual opt-in step, so
+    a person who just registered is reachable by a name fragment — the behaviour
+    the search was missing before Phase 23.
     """
+
+    found = _found(api_client, candidate, "Phase Two")
+    assert [row["user_id"] for row in found] == [other_candidate.id]
+
+
+def test_an_account_with_no_privacy_row_is_invisible_to_a_name_search(
+    api_client, db_session, candidate, other_candidate
+) -> None:
+    """The one remaining "invisible" case: no privacy row at all.
+
+    A row can only be absent for an account created before the eager-signup row
+    existed, or through a path that bypasses signup. Treating "absent" as "off"
+    is the conservative answer, so this deletes the row to reproduce that state
+    and confirms the name search finds nobody.
+    """
+
+    from app.models import ProfilePrivacy
+
+    privacy = db_session.get(ProfilePrivacy, uuid.UUID(other_candidate.id))
+    if privacy is not None:
+        db_session.delete(privacy)
+        db_session.commit()
+
+    assert _found(api_client, candidate, "Phase Two") == []
+
+
+def test_an_explicit_opt_out_hides_an_account_from_a_name_search(
+    api_client, db_session, candidate, other_candidate
+) -> None:
+    """Turning ``discoverable`` off really does hide the account from name search.
+
+    The opt-out is honoured even though the default is now on: a person who turns
+    discoverability off in Settings must not appear in a name fragment search,
+    while their exact handle/public id still resolves (tested below).
+    """
+
+    _make_discoverable(db_session, uuid.UUID(other_candidate.id), discoverable=False)
 
     assert _found(api_client, candidate, "Phase Two") == []
 

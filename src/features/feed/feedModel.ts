@@ -141,6 +141,17 @@ export interface FeedAuthor {
    * no demo post may ever set it to true (asserted in `demoFeedPosts.test.ts`).
    */
   verified: boolean;
+  /**
+   * Whether the server says this author is the signed-in reader (`is_self`
+   * on the wire).
+   *
+   * **The only client-side basis for owner-only actions.** `origin` says
+   * where a post came from, not whose it is: every row from `GET /posts`
+   * carries origin: 'profile', so Delete and every other owner-gated
+   * control reads this field, which the server derives from the JWT identity
+   * and never from anything the client sends.
+   */
+  isSelf: boolean;
 }
 
 /**
@@ -306,6 +317,8 @@ export function fromProfileRecords(profile: ProfileAggregate): FeedPost[] {
     headline: profile.identity.headline,
     avatarUrl: profile.identity.avatar_url,
     profileHref: '/profile',
+    // Profile records are the caller's own by construction.
+    isSelf: true,
     verified: false,
   };
 

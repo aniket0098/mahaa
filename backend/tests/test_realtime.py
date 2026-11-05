@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.core.redis import LocalEventBus, RedisEventBus, build_event_bus
 from app.realtime.events import (
+    BROADCAST_EVENT_TYPES,
     KNOWN_EVENT_TYPES,
     REDIS_CHANNEL,
     EventType,
@@ -162,6 +163,10 @@ def test_a_forged_type_cannot_be_smuggled_in_through_from_dict():
 def test_the_event_types_are_exactly_what_the_backend_publishes():
     # Enumerated rather than derived, so adding a type is a deliberate edit that
     # forces the mobile client to be taught about it in the same change.
+    #
+    # `message.updated` is listed even though Phase 2's own suite predates it:
+    # editing arrived in Phase 14's calling phase, and a vocabulary that is not
+    # enumerated is a vocabulary that drifts.
     assert KNOWN_EVENT_TYPES == {
         # transport lifecycle
         "connection.opened",
@@ -170,6 +175,7 @@ def test_the_event_types_are_exactly_what_the_backend_publishes():
         "system.error",
         # Phase 2 messaging
         "message.created",
+        "message.updated",
         "conversation.read",
         # Phase 3 notifications
         "notification.created",
@@ -178,7 +184,59 @@ def test_the_event_types_are_exactly_what_the_backend_publishes():
         "post.updated",
         "post.deleted",
         "story.created",
+        # Phase 14 calling
+        "call.incoming",
+        "call.accepted",
+        "call.ended",
     }
+
+
+def test_every_call_event_is_targeted_and_never_broadcast():
+    """A call is between two people, so no call event may fan out.
+
+    This is the deliberate opposite of ``post.created``, and the distinction is
+    what stops a future edit from making a ringing call visible to every
+    connected member. Broadcast is decided by membership of
+    ``BROADCAST_EVENT_TYPES`` and nowhere else.
+    """
+
+    call_types = {
+        EventType.CALL_INCOMING,
+        EventType.CALL_ACCEPTED,
+        EventType.CALL_ENDED,
+    }
+    assert call_types <= KNOWN_EVENT_TYPES
+    assert not (call_types & BROADCAST_EVENT_TYPES)
+
+
+def test_a_call_event_carries_no_token_or_room_credential():
+    """The socket never carries a credential.
+
+    A token in an event payload would be written to the Redis channel, logged by
+    the transport, and replayable from a buffered frame after it expired. So the
+    call events carry identifiers only — see ``realtime/call_events.py``, which
+    has no parameter a token could arrive through.
+    """
+
+    for event_type in (
+        EventType.CALL_INCOMING,
+        EventType.CALL_ACCEPTED,
+        EventType.CALL_ENDED,
+    ):
+        event = RealtimeEvent(
+            event_type=event_type,
+            recipient_user_id="callee",
+            payload={"call_id": "c1", "conversation_id": "t1"},
+        )
+        assert set(event.payload) <= {
+            "call_id",
+            "conversation_id",
+            "caller_user_id",
+            "callee_user_id",
+            "mode",
+            "status",
+            "ended_by_user_id",
+        }
 
 
 @pytest.mark.parametrize(

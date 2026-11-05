@@ -75,8 +75,26 @@ class ProfilePrivacy(TimestampMixin, Base):
         nullable=False,
         server_default=ProfileVisibility.PRIVATE.value,
     )
+    #: Whether this account may be found by a **name** fragment in
+    #: ``GET /users/lookup``. An exact handle or ``public_id`` resolves
+    #: regardless of this flag (``services/lookup.py``); it only gates the
+    #: partial-name match.
+    #:
+    #: **Opt-out, not opt-in — defaults to true.** For a professional network
+    #: the intended product behaviour is that a registered person is findable
+    #: by name unless they turn that off in Settings, the way LinkedIn makes an
+    #: account visible by default. The earlier opt-in default (``false``) meant
+    #: a name search found *nobody* until each person manually enabled a flag
+    #: they were never prompted about, which read as "search is broken". The
+    #: privacy contract is unchanged and stays strict: the flag still gates the
+    #: name match, an account that has turned it **off** stays hidden, and an
+    #: exact handle/public id still resolves for a private account. Only the
+    #: *default* a brand-new row is created with moved. The privacy row is now
+    #: created eagerly at signup (``services/identity.create_user``) with this
+    #: default, so the decision is recorded rather than left to a lazy first
+    #: read that a person might never trigger.
     discoverable: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false", default=False
+        Boolean, nullable=False, server_default="true", default=True
     )
     allow_messages: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true", default=True

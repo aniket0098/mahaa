@@ -191,8 +191,16 @@ export default function CandidateProfileScreen() {
         ref={scrollRef}
         style={styles.root}
         contentContainerStyle={{
+          /*
+           * Bottom inset only. The top inset is deliberately **not** repeated
+           * here: `Screen` is rendered `scrollable={false}`, which means it
+           * already wraps this ScrollView in a View carrying
+           * `{ paddingTop: insets.top }`. Adding it again measured 97.5dp of
+           * dead page-coloured band above the cover on a 420dpi phone (cover
+           * top 256px instead of 128px), which pushed the avatar, name and
+           * every section below the fold and read as a broken header.
+           */
           paddingBottom: insets.bottom + spacing.xxl,
-          paddingTop: insets.top,
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">

@@ -1,0 +1,1 @@
+const fs = require('fs'); const p = 'c:\mahaa\src\app\(candidate)\learn\index.tsx'; let c = fs.readFileSync(p, 'utf8'); c = c.split('=\\\" ).join( "=\'); fs.writeFileSync(p, c, 'utf8'); console.log('done'); 

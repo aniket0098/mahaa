@@ -100,6 +100,7 @@ describe('merging published posts invents nothing', () => {
     headline: null,
     avatarUrl: null,
     profileHref: '/profile',
+    isSelf: true,
     verified: false,
   };
   const post = (id: string, overrides: Partial<FeedPost> = {}): FeedPost =>

@@ -1,0 +1,50 @@
+src/app/(candidate)/learn/courses.tsx(143,5): error TS2657: JSX expressions must have one parent element.
+src/app/(candidate)/learn/courses.tsx(189,9): error TS1003: Identifier expected.
+src/app/(candidate)/learn/courses.tsx(189,11): error TS17002: Expected corresponding JSX closing tag for 'View'.
+src/app/(candidate)/learn/courses.tsx(266,146): error TS1005: '}' expected.
+src/app/(candidate)/learn/courses.tsx(266,148): error TS17002: Expected corresponding JSX closing tag for 'Pressable'.
+src/app/(candidate)/learn/courses.tsx(267,13): error TS1005: ')' expected.
+src/app/(candidate)/learn/courses.tsx(267,15): error TS17002: Expected corresponding JSX closing tag for 'View'.
+src/app/(candidate)/learn/courses.tsx(268,13): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+src/app/(candidate)/learn/courses.tsx(270,7): error TS1005: ')' expected.
+src/app/(candidate)/learn/courses.tsx(273,9): error TS1003: Identifier expected.
+src/app/(candidate)/learn/courses.tsx(273,15): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(273,28): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(275,9): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(275,15): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(276,7): error TS1109: Expression expected.
+src/app/(candidate)/learn/courses.tsx(276,9): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/courses.tsx(309,5): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/courses.tsx(310,3): error TS1109: Expression expected.
+src/app/(candidate)/learn/courses.tsx(311,1): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/courses.tsx(315,114): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(315,118): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(315,200): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(315,204): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(315,314): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(315,318): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(315,399): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(316,3): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,91): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,95): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,179): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,183): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,265): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,269): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,325): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,329): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,509): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,513): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,585): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,589): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,708): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,712): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,750): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,754): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,787): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,791): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,814): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,818): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,904): error TS1127: Invalid character.
+src/app/(candidate)/learn/courses.tsx(335,908): error TS1005: ',' expected.
+src/app/(candidate)/learn/courses.tsx(335,946): error TS1127: Invalid character.

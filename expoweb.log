@@ -1,0 +1,24 @@
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_API_BASE_URL_LAN EXPO_PUBLIC_API_BASE_URL_WEB LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_URL
+Starting project at C:\mahaa
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Error while reading cache, falling back to a full crawl:
+ Error: Unable to deserialize cloned data due to invalid or unsupported version.
+    at deserialize (node:v8:435:7)
+    at DiskCacheManager.read (C:\mahaa\node_modules\@expo\metro-file-map\build\cache\DiskCacheManager.js:55:41)
+    at async FileMap.read (C:\mahaa\node_modules\@expo\metro-file-map\build\index.js:371:20)
+    at async C:\mahaa\node_modules\@expo\metro-file-map\build\index.js:262:35
+    at async DependencyGraph.ready (C:\mahaa\node_modules\metro\src\node-haste\DependencyGraph.js:94:5)
+    at async Bundler.ready (C:\mahaa\node_modules\metro\src\Bundler.js:62:5)
+    at async IncrementalBundler.ready (C:\mahaa\node_modules\metro\src\IncrementalBundler.js:310:5)
+    at async Server.ready (C:\mahaa\node_modules\metro\src\Server.js:1446:5)
+    at async runMetro (C:\mahaa\node_modules\metro\src\index.flow.js:142:5)
+    at async createConnectMiddleware (C:\mahaa\node_modules\metro\src\index.flow.js:147:23)
+Waiting on http://localhost:8081
+
+An update for expo is available: 57.0.25 → ~57.0.31
+5 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.

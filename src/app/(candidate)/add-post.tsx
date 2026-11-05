@@ -511,14 +511,17 @@ export default function CandidateAddPostScreen() {
 
   return (
     <View style={s.root} testID="add-post-screen">
-      <ComposerHeader
-        leading={<BackButton label="Back" onPress={requestClose} />}
-        draftLabel={draftLabel}
-        publishLabel={phase === 'uploading' ? 'Uploading…' : 'Publish'}
-        canSubmit={submittable}
-        submitting={busy}
-        onSubmit={() => void publish()}
-      />
+      {/* Safe-area top: Publish must always clear the status bar. */}
+      <View style={[s.headerSafeArea, { paddingTop: insets.top }]}>
+        <ComposerHeader
+          leading={<BackButton label="Back" onPress={requestClose} />}
+          draftLabel={draftLabel}
+          publishLabel={phase === 'uploading' ? 'Uploading…' : 'Publish'}
+          canSubmit={submittable}
+          submitting={busy}
+          onSubmit={() => void publish()}
+        />
+      </View>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -526,7 +529,7 @@ export default function CandidateAddPostScreen() {
         keyboardVerticalOffset={insets.top + 56}>
         <ScrollView
           style={s.scroll}
-          contentContainerStyle={s.content}
+          contentContainerStyle={[s.content, { paddingBottom: spacing.huge + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           {identity ? (

@@ -175,3 +175,15 @@ export async function createStory(input: CreateStoryInput): Promise<Story> {
 
   return mapStory(await apiClient.post<RawStory>('/stories', { body }));
 }
+/**
+ * `DELETE /stories/{id}` — permanent deletion of the caller's own story.
+ *
+ * **The server enforces ownership from the JWT identity** (`is_self` in reverse);
+ * another reader's id answers 404, never a success. The client owns the
+ * aftermath: the viewer filters the story out of the `stories` cache and walks
+ * the remaining group, because the server answers 204 with no body and no
+ * "what is left" payload.
+ */
+export async function deleteStory(storyId: string): Promise<void> {
+  await apiClient.delete<void>(`/stories/${storyId}`);
+}

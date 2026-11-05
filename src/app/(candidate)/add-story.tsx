@@ -344,14 +344,16 @@ export default function CandidateCreateStoryScreen() {
             Create Post — so it is always on screen. The previous bottom publish
             bar was present in the hierarchy yet never visible on device, which
             made story publishing impossible to reach. */}
-        <ComposerHeader
-          leading={<BackButton onPress={leave} />}
-          draftLabel=""
-          publishLabel={busy ? 'Working…' : 'Publish'}
-          canSubmit={!busy}
-          submitting={busy}
-          onSubmit={publishOrExplain}
-        />
+        <View style={[s.headerSafeArea, { paddingTop: insets.top }]}>
+          <ComposerHeader
+            leading={<BackButton onPress={leave} />}
+            draftLabel=""
+            publishLabel={busy ? 'Working…' : 'Publish'}
+            canSubmit={!busy}
+            submitting={busy}
+            onSubmit={publishOrExplain}
+          />
+        </View>
       <ScrollView
         style={s.scroll}
         contentContainerStyle={[s.content, { paddingBottom: insets.bottom + spacing.huge }]}

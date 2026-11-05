@@ -1,0 +1,13 @@
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_API_BASE_URL_LAN EXPO_PUBLIC_API_BASE_URL_WEB LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_URL
+Starting project at C:\mahaa
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+
+Logs for your project will appear below.
+Android Bundled 17143ms node_modules\expo-router\entry.js (2212 modules)
+Android Bundled 352ms node_modules\expo-router\entry.js (1 module)

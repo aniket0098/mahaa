@@ -38,6 +38,10 @@ export type RealtimeEventType =
   // module; `queryBridge` is what turns them into cache effects.
   | 'message.created'
   | 'conversation.read'
+  // Phase 14 — editing. Fired after the edit commits, to the *other* member
+  // only; the editor's device already holds the canonical row from the PATCH
+  // response. Payload carries `message_id`, `body` and `edited_at`.
+  | 'message.updated'
   // Phase 3 — notifications. Payload mirrors the backend's `NotificationRead`,
   // so one object renders from either REST or the socket.
   | 'notification.created'
@@ -49,7 +53,15 @@ export type RealtimeEventType =
   | 'post.created'
   | 'post.updated'
   | 'post.deleted'
-  | 'story.created';
+  | 'story.created'
+  // Phase 14 — calling. **Identifiers only, never a token, room URL or media
+  // data**: `call.incoming` announces a ringing call to the callee; the callee
+  // fetches a short-lived token on demand from the token endpoint after
+  // accepting. `call.ended` carries every terminal outcome in one type so the
+  // screen has a single "the call is over" path that reads `status`.
+  | 'call.incoming'
+  | 'call.accepted'
+  | 'call.ended';
 
 export interface RealtimeEvent {
   event_id: string;
@@ -79,12 +91,16 @@ const EVENT_TYPES: ReadonlySet<string> = new Set<RealtimeEventType>([
   'system.ping',
   'system.error',
   'message.created',
+  'message.updated',
   'conversation.read',
   'notification.created',
   'post.created',
   'post.updated',
   'post.deleted',
   'story.created',
+  'call.incoming',
+  'call.accepted',
+  'call.ended',
 ]);
 
 /** Rebuild `/api/v1` into `wss://host/api/v1/ws`. */

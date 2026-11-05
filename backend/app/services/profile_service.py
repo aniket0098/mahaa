@@ -95,9 +95,11 @@ def get_or_create_profile(session: Session, user_id) -> Profile:
 def get_or_create_privacy(session: Session, user_id) -> ProfilePrivacy:
     """The privacy row, created with the documented defaults.
 
-    ``private`` / not discoverable / messages allowed / contact details hidden â€”
-    the column defaults. A missing row would otherwise have to be interpreted,
-    and an interpreted "unknown" is how a private profile leaks.
+    ``private`` profile / **discoverable by name** / messages allowed / contact
+    details hidden — the column defaults (Phase 23: ``discoverable`` is opt-out,
+    so a registered account is findable by name until its owner turns it off).
+    A missing row would otherwise have to be interpreted, and an interpreted
+    "unknown" is how a private profile leaks.
     """
 
     privacy = session.get(ProfilePrivacy, user_id)

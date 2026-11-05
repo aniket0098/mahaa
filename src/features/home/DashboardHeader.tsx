@@ -20,10 +20,11 @@
  * list, no invented results — and the honest note under the field is kept, so
  * the placeholder never promises a job or company search the API cannot serve.
  *
- * The bell opens the existing `/notifications` route, which is an honest
- * StageScreen notice. It carries **no badge, dot, or count**, because the API
- * has no notifications router and a badge would be a number the server cannot
- * supply (PRODUCT_DECISIONS S8).
+ * The bell opens the real `/notifications` inbox, which is backed by the main
+ * backend's `/notifications` router — so it carries the **server's unread
+ * count** (`GET /notifications/unread-count`), hidden at zero and capped at
+ * `9+` above nine. A badge is only honest when the number behind it is the
+ * server's own; see `NotificationBell` and `useUnreadNotificationCount`.
  *
  * The avatar and the name both come from the real authenticated principal.
  *
@@ -47,6 +48,10 @@ import { Avatar } from '@/components/ui/Avatar';
 import { colors } from '@/theme/tokens';
 import { styles } from '@/features/home/homeStyles';
 import { useSidebar } from '@/features/navigation/SidebarContext';
+import { NotificationBell } from '@/features/notifications/NotificationBell';
+import { useUnreadNotificationCount } from '@/features/notifications/useNotifications';
+import { PeopleSearchResults } from '@/features/people/PeopleSearchResults';
+import { usePeopleSearch } from '@/features/people/usePeopleSearch';
 import type { Principal } from '@/types/auth';
 
 /** Minimum term before the real catalogue request is made. */
@@ -124,6 +129,16 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
     enabled: isSearchOpen && hasQuery,
   });
 
+  // People lookup runs alongside skills, against the real `/users/lookup`.
+  const people = usePeopleSearch(isSearchOpen ? query : '', principal.public_id);
+
+  // The bell's number: the server's own unread count, the same number the
+  // Notifications screen drains with every read or resolution. Mounted here
+  // rather than in a subtree because React Query owns the lifecycle — the
+  // realtime bridge invalidates this key on `notification.created`, and the
+  // focus refetch corrects it when the reader returns to the app.
+  const unread = useUnreadNotificationCount();
+
   const items = suggestions.data?.items ?? [];
 
   const openSearch = useCallback(() => {
@@ -186,11 +201,11 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
             <AppIcon name={SEARCH_ICON} size={17} color={colors.colorTextTertiary} />
             <TextInput
               ref={inputRef}
-              accessibilityLabel="Search jobs, companies, and skills"
+              accessibilityLabel="Search people by name or username, and skills"
               style={styles.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder="Search jobs, companies..."
+              placeholder="Search people or skills..."
               placeholderTextColor={colors.colorTextTertiary}
               autoCapitalize="none"
               autoCorrect={false}
@@ -216,7 +231,7 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
             style={styles.searchTrigger}
             onPress={openSearch}
             accessibilityRole="search"
-            accessibilityLabel="Search jobs, companies, and skills"
+            accessibilityLabel="Search people by name or username, and skills"
             accessibilityHint="Opens search">
             <AppIcon name={SEARCH_ICON} size={17} color={colors.colorTextTertiary} />
             <AppText
@@ -224,7 +239,7 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
               tone="tertiary"
               numberOfLines={1}
               style={styles.searchPlaceholder}>
-              Search jobs, companies...
+              Search people or skills...
             </AppText>
           </Pressable>
         )}
@@ -244,18 +259,16 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
           </Pressable>
         ) : (
           <>
-            <Pressable
-              style={styles.headerAction}
+            {/*
+              The bell opens the real `/notifications` inbox, and carries the
+              server's unread count (hidden at zero) so a pending request is
+              visible from Home the moment the server records it.
+            */}
+            <NotificationBell
+              count={unread.isError ? 0 : unread.count}
+              isLoading={unread.isLoading}
               onPress={() => router.push('/notifications' as never)}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-              accessibilityHint="Opens notifications">
-              <AppIcon
-                name={{ ios: 'bell', android: 'notifications' }}
-                size={22}
-                color={colors.colorTextPrimary}
-              />
-            </Pressable>
+            />
 
             <Pressable
               style={styles.headerAction}
@@ -274,6 +287,45 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
       {isSearchOpen ? (
         hasQuery ? (
           <View style={styles.searchResults}>
+            {/* People first — the real `/users/lookup`, self excluded, each row
+                opening a public profile or sending a connection request. */}
+            {people.isDebouncing || people.isPending ? (
+              <AppText variant="small" tone="secondary" style={styles.searchResult}>
+                Searching people…
+              </AppText>
+            ) : null}
+
+            {people.isError ? (
+              <View style={styles.searchResult}>
+                <AppText variant="small" tone="danger">
+                  {people.error}
+                </AppText>
+                <AppText
+                  variant="small"
+                  weight="semibold"
+                  tone="accent"
+                  accessibilityRole="button"
+                  onPress={people.refetch}>
+                  Retry
+                </AppText>
+              </View>
+            ) : null}
+
+            {people.isEmpty ? (
+              <AppText variant="small" tone="secondary" style={styles.searchResult}>
+                {`No people match “${trimmed}”.`}
+              </AppText>
+            ) : null}
+
+            <PeopleSearchResults people={people.people} selfPublicId={principal.public_id} />
+
+            {/* A section break so people and skills never read as one list. */}
+            {people.people.length > 0 && items.length > 0 ? (
+              <AppText variant="caption" uppercase tone="tertiary" style={styles.searchHint}>
+                Skills
+              </AppText>
+            ) : null}
+
             {suggestions.isPending ? (
               <AppText variant="small" tone="secondary" style={styles.searchResult}>
                 Searching skills…
@@ -313,13 +365,13 @@ export function DashboardHeader({ principal }: DashboardHeaderProps) {
               : null}
 
             <AppText variant="caption" tone="tertiary" style={styles.searchHint}>
-              Skills open on your profile, where you set levels and evidence.
+              Tap a person to open their profile. Skills open on your profile, where you set levels
+              and evidence.
             </AppText>
           </View>
         ) : (
           <AppText variant="caption" tone="tertiary">
-            Skill search works today. Job, internship, course, project, and people search arrive with
-            the discovery stage.
+            Search by name or @username to find people, or a skill name to review your levels.
           </AppText>
         )
       ) : null}

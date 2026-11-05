@@ -25,6 +25,13 @@ export const composerStyles = StyleSheet.create({
   },
   headerTitle: { flex: 1 },
   scroll: { flex: 1 },
+  /**
+   * The header (home of Publish) sits in the real safe area: `paddingTop` is
+   * supplied at the call site from `useSafeAreaInsets().top`, so the Publish
+   * button always clears the Android status bar, notches, and landscape cutouts
+   * on every screen size — never a fixed offset, never under the notch.
+   */
+  headerSafeArea: { backgroundColor: colors.colorBgSurface },
   content: { gap: spacing.lg, padding: spacing.pagePadding, paddingBottom: spacing.huge },
 
   section: { gap: spacing.md },

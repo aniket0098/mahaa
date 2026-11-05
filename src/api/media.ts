@@ -55,7 +55,7 @@ export interface MediaRead {
  * The media kinds the posts API accepts. `document` exists on the server but
  * has no composer surface, so it is deliberately not offered here.
  */
-export type MediaKind = 'image' | 'video';
+export type MediaKind = 'image' | 'video' | 'document';
 
 /** A file the user picked, ready to upload. */
 export interface PickedMedia {
@@ -334,6 +334,16 @@ export type UploadMethod = 'POST' | 'PUT';
 /** `GET /media` — the server's own limits. */
 export async function fetchMediaLimits(): Promise<MediaLimits> {
   return apiClient.get<MediaLimits>('/media');
+}
+
+/** `GET /media/mine` — the caller's own uploads (metadata only). */
+export async function fetchMyUploads(): Promise<MediaRead[]> {
+  return apiClient.get<MediaRead[]>('/media/mine');
+}
+
+/** `DELETE /media/{id}` — remove one of the caller's own uploads. */
+export async function deleteMedia(id: string): Promise<void> {
+  await apiClient.delete<void>(`/media/${encodeURIComponent(id)}`);
 }
 
 /**

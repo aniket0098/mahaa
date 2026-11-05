@@ -70,6 +70,8 @@ const SELF_AUTHOR: FeedAuthor = {
   headline: null,
   avatarUrl: null,
   profileHref: null,
+  // The optimistic comment's author is this reader.
+  isSelf: true,
   verified: false,
 };
 

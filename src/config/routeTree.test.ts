@@ -25,6 +25,7 @@ import {
   COLLEGE_TABS,
   EMPLOYER_DETAIL_ROUTES,
   EMPLOYER_TABS,
+  LEARNING_HUB_TABS,
   PUBLIC_ROUTES,
   detailRoutesForRole,
   detailScreensForRole,
@@ -73,7 +74,10 @@ const GROUPS = ['(candidate)', '(employer)', '(college)'] as const;
  * every other directory level is kept, so the relative path is the whole answer.
  */
 function routePathFor(relative: string): string {
-  return `/${relative}`;
+  // `index.tsx` is the directory's index route — `learn/index.tsx` is served
+  // at `/learn`, not `/learn/index`. A bare `index` resolves to the root `/`.
+  const stripped = relative.replace(/\/index$/, '');
+  return stripped ? `/${stripped}` : '/';
 }
 
 /** The file that serves a declared path, or null when nothing does. */
@@ -91,6 +95,11 @@ function fileForPath(path: string): string | null {
   for (const group of groups) {
     const direct = `${APP_DIR}/${group}/${relative}.tsx`;
     if (existsSync(direct)) return direct;
+    // A route group directory (`learn/`) serves its path through `index.tsx`,
+    // not through a flat `learn.tsx` file — expo-router treats `index` as the
+    // directory's index route (so `learn/index.tsx` is served at `/learn`).
+    const groupIndex = `${APP_DIR}/${group}/${relative}/index.tsx`;
+    if (existsSync(groupIndex)) return groupIndex;
   }
   return null;
 }
@@ -147,6 +156,10 @@ describe('route files on disk', () => {
       // inventory rather than hand-listed, so a new role is covered by construction
       // instead of needing a second edit here each time one is added.
       ...APP_ROLES.flatMap((role) => tabsForRole(role).map((tab) => tab.path)),
+      // The Learning Hub's nested sections live under `/learn` and are declared
+      // in `LEARNING_HUB_TABS` (the candidate `learn` tab itself is already in
+      // `CANDIDATE_TABS`; the Set dedupes the overlap).
+      ...LEARNING_HUB_TABS.map((tab) => tab.path),
       ...APP_ROLES.flatMap((role) => detailRoutesForRole(role).map((r) => r.path)),
     ]);
     for (const group of GROUPS) {

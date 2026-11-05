@@ -29,22 +29,39 @@
  * everything, so no player, listener or timer outlives the viewer.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View, type AppStateStatus } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type AppStateStatus,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/ui/AppIcon';
+import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuthorConnection } from '@/features/connection/useAuthorConnection';
+import { deleteStory } from '@/api/stories';
+import { queryKeys } from '@/api/queryKeys';
 import { colors, radius, spacing, typography } from '@/theme/tokens';
-import type { StoryItem } from '@/types/story';
+import type { FastApiPage, Story, StoryItem } from '@/types/story';
 import { DEMO_STORY_BADGE, isDemoStory, isDemoStoryId } from './demoStories';
+import { useQueryClient } from '@tanstack/react-query';
+import { getStoryOrigin } from './storyOrigin';
 import { StoryMediaLayer } from './StoryMediaLayer';
 import { formatStoryRelativeTime, getStoryTypeBadgeLabel } from './storyModel';
 import {
   isPremiumStoryGroup,
   nextStoryPosition,
+  repositionAfterStoryRemoval,
   previousStoryPosition,
   shouldShowStoryDetails,
   storyAt,
@@ -81,8 +98,22 @@ export function StoryViewer({
   // Hold-to-pause on a tap zone, and app-level pause — combined, never mixed.
   const [held, setHeld] = useState(false);
   const [backgrounded, setBackgrounded] = useState(AppState.currentState !== 'active');
+  // Closing (item 5) freezes playback BEFORE the exit animation runs.
+  const [closing, setClosing] = useState(false);
+  // The three-dot delete dialog (item 2).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const closingRef = useRef(false);
+  const startCloseRef = useRef<() => void>(() => undefined);
+  const queryClient = useQueryClient();
 
-  const paused = held || backgrounded;
+  // One closing animation per open: the native-driven value interpolates
+  // the whole viewer toward the originating bubble (see startClose).
+  const [closeProgress] = useState(() => new Animated.Value(0));
+
+  const paused = held || backgrounded || closing;
 
   const group = groups[position.groupIndex];
   const currentStory = storyAt(groups, position);
@@ -123,7 +154,8 @@ export function StoryViewer({
     advancingRef.current = true;
     const next = nextStoryPosition(groupsRef.current, positionRef.current);
     if (!next) {
-      onCloseRef.current();
+      // Last story of the last person: the same animated close.
+      startCloseRef.current();
       return;
     }
     setProgress(0);
@@ -166,6 +198,13 @@ export function StoryViewer({
   // Record a view exactly once per story id. The primitive dependency plus the
   // id set is what makes a re-render (or a refetch, or a mutation state change)
   // unable to re-fire the POST — the crash loop, closed for good.
+// The one repositioning rule after a story vanishes from the group data
+  // (its own deletion, or an expiry sweep racing behind the viewer). The ref
+  // carries the deleted id only for the integer instant the cache update has
+  // landed but the removal has not been folded into `position` yet — it is
+  // cleared the moment the viewer moves, so a later refetch can never be
+  // misread as a deletion.
+  const expectedStoryIdRef = useRef<string | null>(null);
   const recordedRef = useRef(new Set<string>());
   useEffect(() => {
     if (!storyId || recordedRef.current.has(storyId)) return;
@@ -187,8 +226,26 @@ export function StoryViewer({
       if (now.groupIndex !== g || now.storyIndex !== index) {
         setPosition({ groupIndex: g, storyIndex: index });
       }
+      if (expectedStoryIdRef.current === current.id) {
+        expectedStoryIdRef.current = null;
+      }
       return;
     }
+    // The story the viewer was showing is gone from the new groups — a
+    // deletion (or an expiry sweep). Fold the removal into `position` with
+    // the one rule in storyGroups: next remaining story, next person, else
+    // close. This is the same single `setPosition` the refetch path above
+    // uses — no parallel repositioning source. `closeRef` is late-bound
+    // below, so the effect reads the starter through the indirection.
+    const removedId = expectedStoryIdRef.current ?? storyRef.current?.id ?? '';
+    expectedStoryIdRef.current = null;
+    const next = repositionAfterStoryRemoval(groups, positionRef.current, removedId);
+    if (!next) {
+      startCloseRef.current();
+      return;
+    }
+    setProgress(0);
+    setPosition(next);
   }, [groups]);
 
   // Pause on background, resume on foreground. Nothing advances while
@@ -206,9 +263,88 @@ export function StoryViewer({
   const detailsNotice =
     detailsStoryId !== null && storyId !== null && detailsStoryId === storyId;
 
+  /**
+   * The ONE closing path: pause first, animate toward the originating bubble,
+   * then unmount.
+   *
+   * 1. `closing` flips `paused` true, so the video player and the static-layer
+   *    timer stop BEFORE the animation's first frame — no audio continues in
+   *    the background, and no completion event re-advances mid-teardown.
+   * 2. The native-driven animation scales/translates/fades the whole viewer
+   *    toward the bubble that opened it (a calm shrink-and-fade for deep
+   *    links with no recorded origin). The Home screen underneath never moves.
+   * 3. Only the animation's completion calls `onClose`: the route unmount then
+   *    releases the player, removes its listeners, and clears the active story.
+   *
+   * The X button, the delete-flow close, the Android hardware back button, and
+   * the final advance all come through here. Listener contexts use
+   * `startCloseRef` so they never capture a stale closure.
+   */
+  const startClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    advancingRef.current = true;
+    setClosing(true);
+    setMenuOpen(false);
+    setConfirmingDelete(false);
+    closeProgress.setValue(0);
+    Animated.timing(closeProgress, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) onCloseRef.current();
+    });
+  }, [closeProgress]);
+  useEffect(() => {
+    startCloseRef.current = startClose;
+  });
+  /**
+   * Delete the current story, then fold the removal into the viewer. The
+   * cache update drops the Home bubble instantly; the [groups] effect above
+   * performs the actual walk (next remaining story, next person, or close).
+   */
+  const handleDeleteStory = useCallback(async () => {
+    const story = storyRef.current;
+    if (!story || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteStory(story.id);
+      expectedStoryIdRef.current = story.id;
+      queryClient.setQueryData<FastApiPage<Story>>(queryKeys.stories, (cached) => {
+        if (!cached) return cached;
+        const items = cached.items.filter((entry) => entry.id !== story.id);
+        return { ...cached, items, total: Math.max(0, cached.total - 1) };
+      });
+      setMenuOpen(false);
+      setConfirmingDelete(false);
+      setDeleteError(null);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.stories });
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : 'The story could not be deleted.',
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, queryClient]);
+  // Android hardware Back takes the SAME animated path as the X button —
+  // never a bare pop that would strand the old player underneath.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (menuOpen) {
+        setMenuOpen(false);
+        setConfirmingDelete(false);
+        return true;
+      }
+      startCloseRef.current();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [menuOpen]);
   const handleClose = useCallback(() => {
-    advancingRef.current = true; // freeze any late completion before teardown
-    onCloseRef.current();
+    startCloseRef.current();
   }, []);
 
   const isDemo = currentStory ? isDemoStory(currentStory) : false;
@@ -236,13 +372,50 @@ export function StoryViewer({
     if (opportunity && onOpenOpportunity) onOpenOpportunity(opportunity.id);
   }, [opportunity, onOpenOpportunity]);
 
+  // Measured once per close: the bubble that opened the viewer (or the
+  // centred fallback). Read here — not inside the animation — so Home can
+  // scroll underneath without moving the target mid-flight. `closing` is the
+  // trigger: the memo re-reads the latest recorded origin exactly when a new
+  // close begins, and never while the animation is already running.
+  const closeTarget = useMemo(() => {
+    const screen = Dimensions.get('window');
+    const origin = getStoryOrigin();
+    return {
+      dx: origin ? origin.x + origin.width / 2 - screen.width / 2 : 0,
+      dy: origin ? origin.y + origin.height / 2 - screen.height / 2 : 0,
+      scale: origin
+        ? Math.max(0.12, Math.min(0.3, origin.width / screen.width))
+        : 0.92,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closing]);
+
   if (!group || !currentStory) return null;
 
+  // The one closing choreography: whole-viewer shrink toward the recorded
+  // bubble plus a fade. Native-driven, so Home keeps 60fps; the media layer
+  // underneath is already paused via `closing`, so its last frame holds
+  // without flashing while the viewer shrinks.
+  const closeScale = closeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, closeTarget.scale] });
+  const closeTranslateX = closeProgress.interpolate({ inputRange: [0, 1], outputRange: [0, closeTarget.dx] });
+  const closeTranslateY = closeProgress.interpolate({ inputRange: [0, 1], outputRange: [0, closeTarget.dy] });
+  const closeOpacity = closeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+
   const caption = currentStory.caption;
+  // Only the author's own, non-demo stories show the overflow — another
+  // person's story never gets a Delete row.
+  const canDelete = Boolean(currentStory.isSelf) && !isDemoStory(currentStory);
 
   return (
-    <View
-      style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+    <Animated.View
+      style={[
+        styles.container,
+        { paddingTop: insets.top, paddingBottom: insets.bottom },
+        {
+          opacity: closeOpacity,
+          transform: [{ translateX: closeTranslateX }, { translateY: closeTranslateY }, { scale: closeScale }],
+        },
+      ]}
       testID="story-viewer">
       {/* 1. The media: exactly one layer, keyed to this story (+ restart gen). */}
       <View style={StyleSheet.absoluteFill}>
@@ -358,6 +531,28 @@ export function StoryViewer({
             </Pressable>
           ) : null}
 
+          {/* Owner-only overflow: your own non-demo story gets a Delete path;
+              another person's story shows Close and nothing else. */}
+          {canDelete ? (
+            <Pressable
+              style={styles.menuButton}
+              onPress={() => {
+                setDeleteError(null);
+                setConfirmingDelete(false);
+                setMenuOpen(true);
+              }}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Story options"
+              testID="story-menu">
+              <AppIcon
+                name={{ ios: 'ellipsis', android: 'more_vert' }}
+                size={22}
+                color={colors.colorTextOnPrimary}
+              />
+            </Pressable>
+          ) : null}
+
           <Pressable
             style={styles.closeButton}
             onPress={handleClose}
@@ -453,7 +648,97 @@ export function StoryViewer({
           )
         ) : null}
       </LinearGradient>
-    </View>
+
+      {/* Owner-only story menu: Delete with the spec copy, a spinner while the 204 is in flight, and the own message afterwards. */}
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setMenuOpen(false);
+          setConfirmingDelete(false);
+        }}
+        statusBarTranslucent
+        testID="story-menu-dialog">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close story menu"
+          onPress={() => {
+            setMenuOpen(false);
+            setConfirmingDelete(false);
+          }}
+          style={styles.menuBackdrop}>
+          <Pressable
+            onPress={() => undefined}
+            style={[styles.menuCard, { paddingBottom: insets.bottom + spacing.cardPadding }]}>
+            {confirmingDelete ? (
+              <View style={styles.menuBody} testID="story-delete-confirm">
+                <Text style={styles.menuTitle}>Delete this story permanently?</Text>
+                <Text style={styles.menuText}>This action cannot be undone.</Text>
+                {deleteError ? (
+                  <Text style={styles.menuError} testID="story-delete-error">
+                    {deleteError}
+                  </Text>
+                ) : null}
+                <View style={styles.menuRow}>
+                  <Button
+                    label="Cancel"
+                    variant="secondary"
+                    onPress={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    style={styles.menuButtonFlex}
+                  />
+                  <Button
+                    label="Delete"
+                    variant="danger"
+                    loading={deleting}
+                    onPress={() => void handleDeleteStory()}
+                    style={styles.menuButtonFlex}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.menuBody}>
+                <Text style={styles.menuTitle}>Story options</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete this story. Removes it from the platform permanently."
+                  onPress={() => setConfirmingDelete(true)}
+                  style={[styles.menuAction, styles.menuActionDanger]}
+                  testID="story-delete">
+                  <AppIcon
+                    name={{ ios: 'trash', android: 'delete' }}
+                    size={18}
+                    color={colors.colorDanger}
+                  />
+                  <View style={styles.menuActionText}>
+                    <Text style={[styles.menuActionLabel, styles.menuActionLabelDanger]}>Delete</Text>
+                    <Text style={styles.menuActionHint}>
+                      Removes the story from the platform permanently
+                    </Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close story menu"
+                  onPress={() => {
+                    setMenuOpen(false);
+                    setConfirmingDelete(false);
+                  }}
+                  style={[styles.menuAction, styles.menuActionCentered]}>
+                  <AppIcon
+                    name={{ ios: 'xmark', android: 'close' }}
+                    size={18}
+                    color={colors.colorTextSecondary}
+                  />
+                  <Text style={styles.menuActionLabel}>Close</Text>
+                </Pressable>
+              </View>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </Animated.View>
   );
 }
 
@@ -646,6 +931,62 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /** The overflow button beside Close - the same 44px touch target. */
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /* ------------------------------ story menu ------------------------------ */
+  menuBackdrop: {
+    backgroundColor: colors.colorOverlay,
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.pagePadding,
+  },
+  menuCard: {
+    backgroundColor: colors.colorTextPrimary,
+    borderRadius: radius.sheet,
+    gap: spacing.md,
+    padding: spacing.cardPadding,
+  },
+  menuBody: { gap: spacing.md },
+  menuTitle: {
+    color: colors.colorTextOnPrimary,
+    fontSize: typography.fontSizeH3,
+    fontWeight: typography.fontWeightSemibold,
+  },
+  menuText: { color: colors.colorTextOnPrimary, opacity: 0.85 },
+  menuError: { color: colors.colorDanger },
+  menuRow: { flexDirection: 'row', gap: spacing.md },
+  menuButtonFlex: { flex: 1 },
+  menuAction: {
+    alignItems: 'center',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: radius.control,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'flex-start',
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+  },
+  menuActionCentered: { justifyContent: 'center' },
+  menuActionDanger: { borderColor: colors.colorDanger },
+  menuActionText: { flex: 1, gap: 2 },
+  menuActionLabel: {
+    color: colors.colorTextOnPrimary,
+    fontSize: typography.fontSizeBody,
+    fontWeight: typography.fontWeightSemibold,
+  },
+  menuActionLabelDanger: { color: colors.colorDanger },
+  menuActionHint: {
+    color: colors.colorTextOnPrimary,
+    fontSize: typography.fontSizeCaption,
+    opacity: 0.7,
   },
   captionBlock: {
     gap: spacing.xs,

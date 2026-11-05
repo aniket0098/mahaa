@@ -103,6 +103,8 @@ function demoAuthor(name: string, headline: string) {
     avatarUrl: null,
     // There is no other-user profile screen, so a demo name is not tappable.
     profileHref: null,
+    // A demo author is nobody's account — never deletable as an owner.
+    isSelf: false,
     // No verification service exists, so nothing can be verified â€” ever.
     verified: false,
   };

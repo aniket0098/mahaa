@@ -40,6 +40,17 @@ email-validator>=2.2,<3.0
 # possible.
 redis>=5.0,<6.0
 
+# --- calling (Phase 14) -------------------------------------------------------
+# `livekit-api` mints the short-lived join tokens `GET /calls/{id}/token`
+# returns. The server never proxies media: it signs an `AccessToken` for one
+# member's identity and one call's room, and the client connects straight to
+# LiveKit. `app/services/livekit_tokens.py` imports `AccessToken` and
+# `VideoGrants` from the top-level `livekit.api` and calls
+# `with_identity() / with_grants() / with_ttl() / to_jwt()` — that builder API
+# is stable across 1.x, but 2.0+ renamed it, so the ceiling is explicit rather
+# than accidental.
+livekit-api>=1.2,<2.0
+
 # --- development / test only -------------------------------------------------
 # Kept in this file so a local checkout is one `pip install -r` away from a
 # working test run. Render installs these too, which is slightly wasteful and is

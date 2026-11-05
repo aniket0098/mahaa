@@ -1,0 +1,165 @@
+
+> @mahajob/mobile@0.1.0 web
+> expo start --web
+
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_API_BASE_URL_LAN EXPO_PUBLIC_API_BASE_URL_WEB LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_URL
+Starting project at C:\mahaa
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+
+An update for expo is available: 57.0.25 → ~57.0.31
+5 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+Web Bundled 15187ms node_modules\expo-router\entry.js (1809 modules)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web Bundled 200ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web Bundled 121ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web Bundled 108ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web  WARN  Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md
+Web Bundled 116ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web  WARN  Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md
+Web Bundled 112ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web  WARN  Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md
+Web Bundled 123ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web Bundled 161ms node_modules\expo-router\entry.js (1 module)
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+Web  WARN  "textShadow*" style props are deprecated. Use "textShadow".
+Web  WARN  Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md
+Web  WARN  props.pointerEvents is deprecated. Use style.pointerEvents
+Web  ERROR  
+
+Code: FeedPostCard.tsx
+[0m [90m 308 |[39m             variant[33m=[39m[32m"immersive"[39m
+ [90m 309 |[39m             trailingControl[33m=[39m{
+[31m[1m>[22m[39m[90m 310 |[39m               [33m<[39m[33mPressable[39m
+ [90m     |[39m               [31m[1m^[22m[39m
+ [90m 311 |[39m                 accessibilityRole[33m=[39m[32m"button"[39m
+ [90m 312 |[39m                 accessibilityLabel[33m=[39m[32m"Post options"[39m
+ [90m 313 |[39m                 onPress[33m=[39m{() [33m=>[39m setMenuOpen([36mtrue[39m)}[0m
+Call Stack
+  FeedPostCardInner (src\features\feed\FeedPostCard.tsx:310:15)
+  view.posts.map$argument_0 (src\features\feed\CommunityFeed.tsx:139:13)
+  CommunityFeed (src\features\feed\CommunityFeed.tsx:138:22)
+  CandidateHomeScreen (src\app\(candidate)\home.tsx:178:11)
+  CandidateLayout (src\app\(candidate)\_layout.tsx:42:7)
+  RootLayout (src\app\_layout.tsx:31:13)
+Web  ERROR  
+
+Code: PostVideo.tsx
+[0m [90m 306 |[39m
+ [90m 307 |[39m   [36mreturn[39m (
+[31m[1m>[22m[39m[90m 308 |[39m     [33m<[39m[33mPressable[39m
+ [90m     |[39m     [31m[1m^[22m[39m
+ [90m 309 |[39m       accessibilityRole[33m=[39m[32m"button"[39m
+ [90m 310 |[39m       accessibilityLabel[33m=[39m{[32m`Play video. ${alt}`[39m}
+ [90m 311 |[39m       accessibilityHint[33m=[39m[32m"Downloads and plays this video"[39m[0m
+Call Stack
+  PostVideo (src\features\feed\PostVideo.tsx:308:5)
+  FeedPostCardInner (src\features\feed\FeedPostCard.tsx:302:11)
+  view.posts.map$argument_0 (src\features\feed\CommunityFeed.tsx:139:13)
+  CommunityFeed (src\features\feed\CommunityFeed.tsx:138:22)
+  CandidateHomeScreen (src\app\(candidate)\home.tsx:178:11)
+  CandidateLayout (src\app\(candidate)\_layout.tsx:42:7)
+  RootLayout (src\app\_layout.tsx:31:13)
+Web  WARN  Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md
+Web  WARN  props.pointerEvents is deprecated. Use style.pointerEvents
+Web  ERROR  
+
+Code: FeedPostCard.tsx
+[0m [90m 308 |[39m             variant[33m=[39m[32m"immersive"[39m
+ [90m 309 |[39m             trailingControl[33m=[39m{
+[31m[1m>[22m[39m[90m 310 |[39m               [33m<[39m[33mPressable[39m
+ [90m     |[39m               [31m[1m^[22m[39m
+ [90m 311 |[39m                 accessibilityRole[33m=[39m[32m"button"[39m
+ [90m 312 |[39m                 accessibilityLabel[33m=[39m[32m"Post options"[39m
+ [90m 313 |[39m                 onPress[33m=[39m{() [33m=>[39m setMenuOpen([36mtrue[39m)}[0m
+Call Stack
+  FeedPostCardInner (src\features\feed\FeedPostCard.tsx:310:15)
+  view.posts.map$argument_0 (src\features\feed\CommunityFeed.tsx:139:13)
+  CommunityFeed (src\features\feed\CommunityFeed.tsx:138:22)
+  CandidateHomeScreen (src\app\(candidate)\home.tsx:178:11)
+  CandidateLayout (src\app\(candidate)\_layout.tsx:42:7)
+  RootLayout (src\app\_layout.tsx:31:13)
+Web  ERROR  
+
+Code: PostVideo.tsx
+[0m [90m 306 |[39m
+ [90m 307 |[39m   [36mreturn[39m (
+[31m[1m>[22m[39m[90m 308 |[39m     [33m<[39m[33mPressable[39m
+ [90m     |[39m     [31m[1m^[22m[39m
+ [90m 309 |[39m       accessibilityRole[33m=[39m[32m"button"[39m
+ [90m 310 |[39m       accessibilityLabel[33m=[39m{[32m`Play video. ${alt}`[39m}
+ [90m 311 |[39m       accessibilityHint[33m=[39m[32m"Downloads and plays this video"[39m[0m
+Call Stack
+  PostVideo (src\features\feed\PostVideo.tsx:308:5)
+  FeedPostCardInner (src\features\feed\FeedPostCard.tsx:302:11)
+  view.posts.map$argument_0 (src\features\feed\CommunityFeed.tsx:139:13)
+  CommunityFeed (src\features\feed\CommunityFeed.tsx:138:22)
+  CandidateHomeScreen (src\app\(candidate)\home.tsx:178:11)
+  CandidateLayout (src\app\(candidate)\_layout.tsx:42:7)
+  RootLayout (src\app\_layout.tsx:31:13)

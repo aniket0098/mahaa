@@ -1125,10 +1125,26 @@ def test_a_request_notification_points_at_the_connection(
     # The title is the server's wording, so a copy change is a deployment.
     assert isinstance(item["title"], str) and item["title"]
     assert item["is_read"] is False
-def test_a_new_message_notifies_the_recipient_with_the_conversation(
+
+
+# --- chat stays out of the Notifications inbox -------------------------------
+#
+# An earlier phase produced one ``message`` notification row per chat message.
+# That design was withdrawn: the Messages section is where chat lives, so
+# ``messaging.send`` creates no notification row, ``GET /notifications`` filters
+# the type defensively, and the mobile hook drops it before rendering
+# (``src/features/notifications/messageIsolation.test.ts``). These tests pin the
+# replacement behaviour: sending a message is invisible to the inbox.
+
+
+def test_a_new_message_creates_no_inbox_notification(
     api_client, candidate, other_candidate
 ) -> None:
-    """§13.1's ``message`` type, produced by §7 with no client involvement."""
+    """A stored message notifies nobody through the Notifications inbox.
+
+    The realtime ``message.created`` event is the delivery signal; the inbox is
+    for account events, not for a parallel copy of the Messages section.
+    """
 
     _connect(api_client, candidate, other_candidate)
     conversation_id = _open_conversation(api_client, candidate, other_candidate)
@@ -1140,21 +1156,17 @@ def test_a_new_message_notifies_the_recipient_with_the_conversation(
     )
     assert sent.status_code == 201, sent.text
 
-    received = _only_type(api_client, other_candidate, "message")
-    assert len(received) == 1
-    assert received[0]["actor"]["user_id"] == candidate.id
-    assert received[0]["target_type"] == "conversation"
-    assert received[0]["target_id"] == conversation_id
+    assert _only_type(api_client, other_candidate, "message") == []
 
 
 def test_a_message_notification_never_carries_the_message_body(
     api_client, candidate, other_candidate
 ) -> None:
-    """§13.2: ``data`` is "never a rendered message".
+    """The stronger form of §13.2: the body reaches no second table at all.
 
-    The notification list renders while the app is locked. Copying the body here
-    would duplicate every private message into a second table, and the identifiers
-    are enough to open the thread.
+    With no notification row there is nothing that could carry a rendered
+    message — asserted by reading both inboxes back in full rather than by
+    trusting the row shape of a type that no longer exists.
     """
 
     _connect(api_client, candidate, other_candidate)
@@ -1166,18 +1178,15 @@ def test_a_message_notification_never_carries_the_message_body(
         headers=candidate.headers,
     )
 
-    item = _only_type(api_client, other_candidate, "message")[0]
-
-    assert secret not in str(item["data"])
-    assert secret not in (item["body"] or "")
-    assert set(item["data"]) == {"conversation_id"}
+    for account in (candidate, other_candidate):
+        assert secret not in str(_page(api_client, account, limit=LIMIT_MAX))
 
 
 def test_a_retried_message_does_not_notify_twice(
     api_client, candidate, other_candidate
 ) -> None:
-    """§18's ``client_message_id``. The retry returns the winner's row, so the
-    notification was already emitted by the commit that created it."""
+    """§18's ``client_message_id``. The retry returns the winner's row, and — since
+    a message emits no notification row — the inbox sees nothing either time."""
 
     _connect(api_client, candidate, other_candidate)
     conversation_id = _open_conversation(api_client, candidate, other_candidate)
@@ -1196,9 +1205,10 @@ def test_a_retried_message_does_not_notify_twice(
 
     assert first.status_code == 201, first.text
     assert second.status_code == 200, second.text
-    # One `message` notification, despite two POSTs. The connection noise from
-    # `_connect` is a different type and is filtered out by `_only_type`.
-    assert len(_only_type(api_client, other_candidate, "message")) == 1
+    assert first.json()["id"] == second.json()["id"]
+    # Nothing in the inbox, either time. The connection noise from `_connect` is
+    # a different type and is filtered out by `_only_type`.
+    assert _only_type(api_client, other_candidate, "message") == []
 
 
 def test_the_sender_is_not_notified_of_their_own_message(
@@ -1219,13 +1229,18 @@ def test_the_sender_is_not_notified_of_their_own_message(
     )
 
     assert _only_type(api_client, candidate, "message") == []
-    assert len(_only_type(api_client, other_candidate, "message")) == 1
+    assert _only_type(api_client, other_candidate, "message") == []
 
 
-def test_every_second_message_notifies_again(
+def test_every_second_message_also_stays_out_of_the_inbox(
     api_client, candidate, other_candidate
 ) -> None:
-    """Two messages are two events. Idempotency must not become deduplication."""
+    """Two messages are two stored messages, and still zero inbox rows.
+
+    "No notification per message" is not a first-message special case that
+    idempotency later mistakes for deduplication — every chat message is
+    invisible to the Notifications inbox by design.
+    """
 
     _connect(api_client, candidate, other_candidate)
     conversation_id = _open_conversation(api_client, candidate, other_candidate)
@@ -1237,20 +1252,23 @@ def test_every_second_message_notifies_again(
         )
         assert response.status_code == 201, response.text
 
-    assert len(_only_type(api_client, other_candidate, "message")) == 2
+    assert _only_type(api_client, other_candidate, "message") == []
+
+
 # --- transactionality (§6.3's shared commit) --------------------------------
 
 
-def test_the_message_and_its_notification_are_written_by_one_transaction(
+# --- transactionality (§6.3's shared commit) --------------------------------
+
+
+def test_a_message_is_written_without_any_notification_row(
     api_client, db_session, candidate, other_candidate
 ) -> None:
-    """The strongest claim this phase makes, tested directly.
+    """The table-level form of the new contract, asserted directly.
 
-    ``emit`` never commits: it stages a row on the caller's session and returns.
-    So if the message and the notification are both written, they were written by
-    the same commit — and if the operation rolls back, the notification goes with
-    it. A message that can exist without its notification is a message delivered
-    to an inbox that does not know about it.
+    The HTTP layer filters, so the strongest remaining claim is about the rows
+    themselves: one ``Message`` for the conversation, and no ``Notification`` of
+    that type for the recipient — written or otherwise.
     """
 
     _connect(api_client, candidate, other_candidate)
@@ -1263,19 +1281,15 @@ def test_the_message_and_its_notification_are_written_by_one_transaction(
 
     messages = db_session.scalars(select(Message)).all()
     assert len(messages) == 1
+    assert messages[0].conversation_id == uuid.UUID(conversation_id)
 
-    notifications = db_session.scalars(
+    message_rows = db_session.scalars(
         select(Notification).where(
             Notification.user_id == uuid.UUID(other_candidate.id),
             Notification.type == NotificationType.MESSAGE,
         )
     ).all()
-    assert len(notifications) == 1
-
-    row = notifications[0]
-    assert row.target_id == uuid.UUID(conversation_id)
-    assert row.data == {"conversation_id": conversation_id}
-    assert row.is_read is False
+    assert message_rows == []
 
 
 def test_emit_never_commits_on_its_own(db_session, candidate, other_candidate) -> None:
@@ -1413,8 +1427,14 @@ def test_the_unread_query_is_served_by_the_partial_index(
     implied by the query's ``WHERE``. If the index's predicate text and the
     ``is_read = false`` filter ever drift apart, this stops being a partial-index
     scan — which is invisible to every functional assertion in this file.
+
+    The bulk of the seed is *read* rows. A partial index exists precisely so the
+    unread tail stays cheap; seeding only three unread rows would make both
+    indexes one page wide, and the choice between them becomes a coin flip
+    rather than the claim being made.
     """
 
+    _seed(db_session, candidate, other_candidate, 400, is_read=True)
     _seed(db_session, candidate, other_candidate, 3)
 
     plan = _explain(

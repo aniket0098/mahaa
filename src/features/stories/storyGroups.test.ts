@@ -6,8 +6,10 @@ import {
   isPremiumStoryGroup,
   nextStoryPosition,
   normalizeStoryType,
+  positionForAuthor,
   positionForStoryId,
   previousStoryPosition,
+  repositionAfterStoryRemoval,
   shouldShowStoryDetails,
   storyAt,
   storyGroupRing,
@@ -292,5 +294,76 @@ describe('storyGroups', () => {
       expect(storyAt(fixture, { groupIndex: 5, storyIndex: 0 })).toBeNull();
       expect(storyAt(fixture, { groupIndex: 0, storyIndex: 9 })).toBeNull();
     });
+  });
+});
+
+
+describe('positionForAuthor — the stable open', () => {
+  const groups = groupStoriesByAuthor([
+    makeStory('a1', 'MJ-AAA', { viewed: true }),
+    makeStory('a2', 'MJ-AAA'),
+    makeStory('b1', 'MJ-BBB'),
+    makeStory('c1', 'MJ-CCC'),
+  ]);
+
+  it('tap A -> A opens, at the first unviewed story of A', () => {
+    expect(positionForAuthor(groups, 'MJ-AAA')).toEqual({ groupIndex: 0, storyIndex: 1 });
+  });
+
+  it('tap B -> B opens (group 1), never A group', () => {
+    expect(positionForAuthor(groups, 'MJ-BBB')).toEqual({ groupIndex: 1, storyIndex: 0 });
+  });
+
+  it('tap C -> C opens (group 2), even after another viewer was open', () => {
+    expect(positionForAuthor(groups, 'MJ-CCC')).toEqual({ groupIndex: 2, storyIndex: 0 });
+  });
+
+  it('a fully-viewed person restarts at their first story', () => {
+    const seen = groupStoriesByAuthor([
+      makeStory('x1', 'MJ-XXX', { viewed: true }),
+      makeStory('x2', 'MJ-XXX', { viewed: true }),
+    ]);
+    expect(positionForAuthor(seen, 'MJ-XXX')).toEqual({ groupIndex: 0, storyIndex: 0 });
+  });
+
+  it('an unknown author resolves to null — the viewer shows its honest empty state', () => {
+    expect(positionForAuthor(groups, 'MJ-NOPE')).toBeNull();
+  });
+});
+
+describe('repositionAfterStoryRemoval — the walk after a story vanishes', () => {
+  const groups = groupStoriesByAuthor([
+    makeStory('a1', 'MJ-AAA'),
+    makeStory('a2', 'MJ-AAA'),
+    makeStory('a3', 'MJ-AAA'),
+    makeStory('b1', 'MJ-BBB'),
+  ]);
+  const at = (groupIndex: number, storyIndex: number) => ({ groupIndex, storyIndex });
+
+  it('a surviving story keeps its position — a refetch cannot jump the reader', () => {
+    expect(repositionAfterStoryRemoval(groups, at(0, 1), 'a3')).toEqual(at(0, 1));
+  });
+
+  it('deleting the middle story lands on the next remaining story', () => {
+    // a1 a2 a3, showing a2 -> a3 slides into the slot.
+    expect(repositionAfterStoryRemoval(groups, at(0, 1), 'a2')).toEqual(at(0, 1));
+  });
+
+  it('deleting the last story of a person clamps to the previous one', () => {
+    expect(repositionAfterStoryRemoval(groups, at(0, 2), 'a3')).toEqual(at(0, 1));
+  });
+
+  it('deleting the only story of a person walks to the previous person, or closes', () => {
+    // Nobody left to walk to: the group is empty and there is no group 1.
+    const lone = groupStoriesByAuthor([makeStory('b1', 'MJ-BBB')]);
+    expect(repositionAfterStoryRemoval(lone, at(0, 0), 'b1')).toBeNull();
+    // Person B gone but A remains: the walk lands on A's last story.
+    expect(repositionAfterStoryRemoval(groups, at(1, 0), 'b1')).toEqual(at(0, 2));
+  });
+
+  it('nothing left anywhere -> null, which the viewer reads as close', () => {
+    expect(repositionAfterStoryRemoval([], at(0, 0), 'a1')).toBeNull();
+    const only = groupStoriesByAuthor([makeStory('solo', 'MJ-SOLO')]);
+    expect(repositionAfterStoryRemoval(only, at(0, 0), 'solo')).toBeNull();
   });
 });

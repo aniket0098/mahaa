@@ -9,9 +9,14 @@ one line: "name search only reaches discoverable accounts; exact handle/public_i
 resolves regardless". Both halves matter, and the asymmetry is the point:
 
 * A **name** is not a handle. People share their names; nobody has agreed to be
-  findable by it. So a partial name match only reaches accounts whose owner turned
-  ``discoverable`` on — and that column defaults to **false**, so a brand-new
-  account is invisible to a name search until it opts in.
+  findable by it. So a partial name match only reaches accounts whose owner has
+  ``discoverable`` on. That column **defaults to true** (opt-out), the way a
+  professional network makes an account visible until its owner turns that off,
+  and the privacy row is created eagerly at signup with that default — so a
+  brand-new account *is* reachable by name unless the person later opts out. An
+  account with no privacy row at all (only possible for a row created before this
+  default, or by a path that bypasses signup) is still treated as **not**
+  discoverable, which is the conservative answer.
 * A **handle** and a **public id** are the two things a person deliberately hands
   out. ``public_id`` exists precisely to be shared, so an exact match on either
   resolves even for a fully private account. That is not a privacy leak: the
@@ -68,10 +73,12 @@ def _escape_like(value: str) -> str:
 def _is_discoverable() -> object:
     """A correlated EXISTS on the owner's privacy row with ``discoverable`` on.
 
-    A user with no privacy row is **not** discoverable. The row is created lazily on
-    first profile read and the column's own default is false, so treating "absent"
-    as "off" is both the conservative answer and the one that matches what a user
-    would see on their own settings screen.
+    A user with no privacy row is **not** discoverable — treating "absent" as
+    "off" is the conservative answer, and it matches the one case a person could
+    still be in without a row (an account created before the eager-signup row
+    existed, or through a path that bypasses signup). The row is otherwise
+    created eagerly at signup and ``discoverable`` defaults to true, so a normal
+    account has an explicit, opt-out row rather than an absent one.
     """
 
     return (

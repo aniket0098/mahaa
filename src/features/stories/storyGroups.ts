@@ -230,3 +230,80 @@ export function storyAt(
 /** How long a non-video story stays on screen (videos use their real duration). */
 export const STORY_FALLBACK_DURATION_MS = 5000;
 
+
+
+/**
+ * Where tapping one PERSON's circle should open: that author's group,
+ * resuming at its first unviewed story (or its first story when everything
+ * is viewed). Null when the author is not in the list.
+ *
+ * **The stable identity the story row opens by.** A story id names one
+ * ephemeral row; an author public id names the group, so the open survives
+ * refetches and deletions that would invalidate a single baked-in story id.
+ */
+export function positionForAuthor(
+  groups: readonly StoryGroup[],
+  authorPublicId: string,
+): StoryPosition | null {
+  for (let g = 0; g < groups.length; g += 1) {
+    if (groups[g].authorPublicId !== authorPublicId) continue;
+    const stories = groups[g].stories;
+    if (stories.length === 0) return null;
+    const unviewedIndex = stories.findIndex((story) => !story.viewed);
+    const resume = unviewedIndex === -1 ? 0 : unviewedIndex;
+    return { groupIndex: g, storyIndex: Math.min(resume, stories.length - 1) };
+  }
+  return null;
+}
+
+/**
+ * Where a deleted story leaves the viewer: the one repositioning rule.
+ *
+ * The caller passes the groups as they are now: the deleted story may still
+ * be in them (the cache update has not re-rendered yet) or already gone (a
+ * refetch rebuilt them without it). The rule is the same either way:
+ *
+ * - a different story sits at the position -> stay (a refetch merely
+ *   reordered rows);
+ * - this group still has stories besides the removed one -> the member that
+ *   slid into the removed slot (clamped index);
+ * - the group is empty after the removal -> the next person with stories,
+ *   else the previous person last story;
+ * - nothing remains -> null, which the viewer reads as close.
+ */
+export function repositionAfterStoryRemoval(
+  groups: readonly StoryGroup[],
+  position: StoryPosition,
+  removedStoryId: string
+): StoryPosition | null {
+  const current = storyAt(groups, position);
+  if (current && current.id !== removedStoryId) return position;
+
+  // The stories of group g as if the removed story were already gone: for
+  // the current group that filters a stale copy; for every other group it
+  // is a no-op, because one story belongs to exactly one group.
+  const remainingAt = (g: number): readonly StoryItem[] => {
+    const stories = groups[g]?.stories ?? [];
+    if (g !== position.groupIndex) return stories;
+    return stories.filter((story) => story.id !== removedStoryId);
+  };
+
+  const mine = remainingAt(position.groupIndex);
+  if (mine.length > 0) {
+    return {
+      groupIndex: position.groupIndex,
+      storyIndex: Math.min(position.storyIndex, mine.length - 1),
+    };
+  }
+
+  for (let g = position.groupIndex + 1; g < groups.length; g += 1) {
+    if (remainingAt(g).length > 0) return { groupIndex: g, storyIndex: 0 };
+  }
+  for (let g = Math.min(position.groupIndex, groups.length - 1); g >= 0; g -= 1) {
+    const remaining = remainingAt(g);
+    if (remaining.length > 0) {
+      return { groupIndex: g, storyIndex: remaining.length - 1 };
+    }
+  }
+  return null;
+}

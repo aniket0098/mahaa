@@ -31,8 +31,10 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     auth,
+    calls,
     companies,
     connections,
+    courses,
     health,
     institutions,
     media,
@@ -45,11 +47,13 @@ from app.api.v1.endpoints import (
     skills,
     stories,
     users,
+    saved,  # Phase 14 — saved items
 )
 from app.api.v1.ws import router as ws_router
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(saved.router)
 api_router.include_router(ws_router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
@@ -70,3 +74,15 @@ api_router.include_router(onboarding.router)
 api_router.include_router(companies.router)
 api_router.include_router(opportunities.router)
 api_router.include_router(institutions.router)
+
+# Phase 14 — calling. Included **after** messaging because every call is bound to
+# a conversation and inherits its membership, so the endpoints it depends on are
+# declared first. Order is declaration order only, as everywhere else in this
+# file: the paths do not shadow each other, so this reads as dependency order.
+api_router.include_router(calls.router)
+
+# Stage 2 of the Learning Hub — the catalogue reads. Included **after** media
+# because courses reference ``media_assets`` (thumbnail and lecture media
+# pointers), so the table's router is declared first; order is declaration
+# order only, as everywhere else in this file.
+api_router.include_router(courses.router)

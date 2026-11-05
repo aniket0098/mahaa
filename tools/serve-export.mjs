@@ -19,7 +19,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const ROOT = new URL('../dist-ui/', import.meta.url).pathname.replace(/^\//, '');
+const ROOT = new URL('../dist/', import.meta.url).pathname.replace(/^\//, '');
 const PORT = Number(process.argv[2] ?? 8082);
 
 const TYPES = {
@@ -40,38 +40,25 @@ const TYPES = {
 /**
  * Serve the exported web build.
  *
- * **Two routing rules, both required by how `expo export` lays the output out.**
+ * In `web.output: "single"` (SPA) mode, `expo export` writes a single
+ * `index.html` and every route (`/login`, `/home`, ...) resolves client-side
+ * via `expo-router`. A plain static server would 404 those paths, so every
+ * request that does not map to a real file on disk falls back to `index.html`,
+ * letting the router mount the matching screen.
  *
- * The export writes one HTML file per route, named after the route
- * (`login.html`, `home.html`, `add-story.html`, `+not-found.html`), *not* a
- * single `index.html` behind a history fallback. So `/login` must be served
- * `login.html`. Handing it `index.html` instead makes React hydrate against the
- * wrong document — React error #418 — and the run then measures the test
- * server's routing bug rather than the app.
- *
- * What still needs the fallback is an asset path with no extension, because
- * `expo-router` pushes those client-side without ever asking the server again.
+ * Asset paths (`.js`, `.css`, `.png`, ...) are served directly from disk.
+ * Everything else — including unknown routes — gets `index.html` so a page
+ * refresh or a direct `/login` navigation keeps working.
  */
-const ROUTE_FILE = {
-  '/': 'index.html',
-  '/index': 'index.html',
-};
-
 const server = createServer(async (request, response) => {
   const { pathname } = new URL(request.url, 'http://x');
   // `normalize` collapses `..` so a request cannot escape the build directory.
   const requested = normalize(decodeURIComponent(pathname)).replace(/^\/+/, '');
+  const filePath = join(ROOT, requested || 'index.html');
 
-  const candidates = requested
-    ? [ROUTE_FILE[pathname], `${requested}.html`, requested, `${requested}/index.html`]
-    : ['index.html'];
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    const filePath = join(ROOT, candidate);
-    try {
-      const info = await stat(filePath);
-      if (!info.isFile()) continue;
+  try {
+    const info = await stat(filePath);
+    if (info.isFile()) {
       const body = await readFile(filePath);
       response.writeHead(200, {
         'Content-Type': TYPES[extname(filePath)] ?? 'application/octet-stream',
@@ -82,13 +69,29 @@ const server = createServer(async (request, response) => {
       });
       response.end(body);
       return;
-    } catch {
-      // Try the next shape.
     }
+  } catch {
+    // Fall through to the SPA fallback below.
   }
 
-  response.writeHead(404, { 'Content-Type': 'text/plain' });
-  response.end(`not found: ${pathname}`);
+  // SPA history fallback: only path-shaped requests (no file extension) get
+  // `index.html`, letting `expo-router` render the correct route client-side.
+  // A request with a file extension that doesn't exist on disk is a missing
+  // asset and must return 404, not HTML disguised as the asset.
+  if (extname(requested)) {
+    response.writeHead(404, { 'Content-Type': 'text/plain' });
+    response.end(`not found: ${pathname}`);
+    return;
+  }
+
+  const indexPath = join(ROOT, 'index.html');
+  const body = await readFile(indexPath);
+  response.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Length': body.length,
+    'Cache-Control': 'no-store',
+  });
+  response.end(body);
 });
 
 server.listen(PORT, () => {

@@ -59,7 +59,7 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
     label: 'Messages',
     icon: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat' },
     iconOutline: { ios: 'bubble.left.and.bubble.right', android: 'chat_bubble_outline' },
-    implemented: false,
+    implemented: true,
   },
   {
     name: 'learn',
@@ -67,7 +67,7 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
     label: 'Learn',
     icon: { ios: 'book.fill', android: 'school' },
     iconOutline: { ios: 'book', android: 'school' },
-    implemented: false,
+    implemented: true,
   },
   {
     name: 'profile',
@@ -78,6 +78,85 @@ export const CANDIDATE_TABS: readonly TabDefinition[] = [
     implemented: true,
   },
 ];
+
+/**
+ * The Learning Hub's own internal bar — exactly four destinations, nested
+ * inside the candidate tree under `learn/`.
+ *
+ * These are declared here for the same reason the role tab sets are: the route
+ * inventory is the single source of truth, so `routeTree.test.ts` can assert
+ * that every hub destination has a screen file and that no screen file is
+ * unreachable. `name` is the screen name **relative to the hub's own
+ * `_layout.tsx`** (`learn/index.tsx` serves `/learn`), which is what a nested
+ * `<Tabs.Screen name=…>` needs — `learningHubScreenNameForPath` resolves it
+ * from the path so the mapping lives in one place, exactly like
+ * `screenNameForPath` does for the role shells.
+ *
+ * `implemented` keeps its inventory meaning: true only when a real API
+ * response backs the tab today. Upload and Saved are honest stage screens —
+ * neither lecture publishing nor a saved-items router exists on the server.
+ */
+export const LEARNING_HUB_TABS: readonly TabDefinition[] = [
+  {
+    name: 'home',
+    path: '/home',
+    label: 'Home',
+    icon: { ios: 'house.fill', android: 'home' },
+    iconOutline: { ios: 'house', android: 'home' },
+    implemented: true,
+  },
+  {
+    name: 'index',
+    path: '/learn',
+    label: 'Lectures',
+    icon: { ios: 'play.rectangle.fill', android: 'video_library' },
+    iconOutline: { ios: 'play.rectangle', android: 'video_library' },
+    implemented: true,
+  },
+  {
+    name: 'courses',
+    path: '/learn/courses',
+    label: 'Courses',
+    icon: { ios: 'book.fill', android: 'menu_book' },
+    iconOutline: { ios: 'book', android: 'menu_book' },
+    implemented: true,
+  },
+  {
+    name: 'upload',
+    path: '/learn/upload',
+    label: 'Upload',
+    icon: { ios: 'square.and.arrow.up.fill', android: 'file_upload' },
+    iconOutline: { ios: 'square.and.arrow.up', android: 'file_upload' },
+    implemented: true,
+  },
+  {
+    name: 'saved',
+    path: '/learn/saved',
+    label: 'Saved',
+    icon: { ios: 'bookmark.fill', android: 'bookmark' },
+    iconOutline: { ios: 'bookmark', android: 'bookmark' },
+    implemented: true,
+  },
+];
+
+/** The hub layout directory inside the candidate group, for the route tests. */
+export const LEARNING_HUB_GROUP_PATH = '/learn';
+
+/**
+ * The nested navigator's screen name for a declared hub path.
+ *
+ *   `/learn`          -> `index`   (app/(candidate)/learn/index.tsx)
+ *   `/learn/courses`  -> `courses` (app/(candidate)/learn/courses.tsx)
+ *
+ * The mirror of `screenNameForPath`, scoped to the hub: expo-router strips the
+ * group directory, and a nested layout addresses its children relative to its
+ * own directory, so only the segment below `/learn` remains — with the root
+ * route's file name (`index`) as the special case.
+ */
+export function learningHubScreenNameForPath(path: string): string {
+  const rest = path.replace(/^\/learn\/?/, '');
+  return rest === '' ? 'index' : rest;
+}
 
 export const EMPLOYER_TABS: readonly TabDefinition[] = [
   {
@@ -173,9 +252,58 @@ export interface DetailRoute {
 export const CANDIDATE_DETAIL_ROUTES: readonly DetailRoute[] = [
   { path: '/jobs/[id]', title: 'Job details', implemented: true },
   { path: '/story/[id]', title: 'Story', implemented: true },
+  { path: '/course/[courseId]', title: 'Course', implemented: true },
+  /**
+   * A single lecture player inside a course. `courseId` is passed as a query
+   * parameter so the screen can rebuild course context (curriculum, actions)
+   * without fetching the course twice. Real server data from `GET /courses/{id}`;
+   * the lecture itself is located within the course's ordered sections.
+   */
+  { path: '/lecture/[id]', title: 'Lecture', implemented: true },
+    /**
+     * A demo lesson preview — honest state for sample lessons that carry no
+     * server lecture id and no media source. Playback is not available.
+     */
+    { path: '/learn/demo/[id]', title: 'Demo lesson', implemented: true },
+  /**
+   * My Learning — the caller's own enrolled courses, opened from the Learning
+   * Hub header rather than a fifth tab (the bar stays at five). Real server
+   * rows from `GET /courses/enrollments/mine`, so `implemented` is true.
+   */
+  { path: '/my-learning', title: 'My Learning', implemented: true },
+  /**
+   * A public person profile, opened from Home's people search. Keyed by the
+   * immutable public id from `GET /users/lookup` — deliberately not `/profile`,
+   * which always loads the caller's own aggregate and would show the wrong
+   * person with edit controls.
+   */
+  { path: '/user/[id]', title: 'Profile', implemented: true },
+  /**
+   * A one-to-one conversation, opened from a Messages row or the supported
+   * start-conversation flow. Keyed by the conversation id the server owns —
+   * deliberately not `/user/[id]`, which names a person, not a thread.
+   */
+  { path: '/conversation/[id]', title: 'Conversation', implemented: true },
+  /**
+   * The active call screen, opened by starting a call from a conversation or by
+   * answering an incoming one. Keyed by the call id the server owns — the row
+   * is what the screen tracks (ringing → answered → ended), not a room name a
+   * client could invent. Carries no tab bar, exactly like the conversation.
+   */
+  { path: '/call/[id]', title: 'Call', implemented: true },
   { path: '/applications', title: 'Applications', implemented: false },
   { path: '/community', title: 'Community', implemented: false },
   { path: '/saved', title: 'Saved', implemented: false },
+  /**
+   * Message-section destinations. The Message screen's Connections and
+   * Companies tabs push here rather than widening the bottom bar, so each is a
+   * detail route with no tab bar of its own. Connections is now the real
+   * connection-request surface (incoming Accept/Decline, sent Cancel, accepted
+   * list) on the main backend's `/connections`; Companies remains an honest
+   * later-phase scaffold, so its `implemented` is false.
+   */
+  { path: '/connections', title: 'Connections', implemented: true },
+  { path: '/companies', title: 'Companies', implemented: false },
   { path: '/add-post', title: 'Add post', implemented: true },
   /**
    * Story publication. Phase 12 added the screen because `POST /stories` had
@@ -192,7 +320,7 @@ export const CANDIDATE_DETAIL_ROUTES: readonly DetailRoute[] = [
   { path: '/profile/achievements', title: 'Achievements', implemented: true },
   { path: '/profile/preferences', title: 'Career preferences', implemented: true },
   { path: '/profile/edit', title: 'Edit profile', implemented: true },
-  { path: '/notifications', title: 'Notifications', implemented: false },
+  { path: '/notifications', title: 'Notifications', implemented: true },
   { path: '/settings', title: 'Settings', implemented: true },
 ];
 

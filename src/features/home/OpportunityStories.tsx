@@ -86,9 +86,11 @@ export function OpportunityStories({ stories, name, avatarUrl }: OpportunityStor
             key={group.authorPublicId}
             group={group}
             onPress={() =>
-              // Open at the group's first story id; the story screen resolves
-              // the whole group and resumes at its first unviewed member.
-              router.push(`/story/${group.stories[0].id}` as never)
+              // Open by the author's stable public id, not by one story id:
+              // the screen resolves the author's current group and resumes at
+              // its first unviewed story, so a refetch or a deletion between
+              // render and tap cannot open somebody else's story.
+              router.push(`/story/${group.authorPublicId}` as never)
             }
           />
         ))}

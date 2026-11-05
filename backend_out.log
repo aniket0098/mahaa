@@ -1,0 +1,404 @@
+{"timestamp": "2026-10-20T15:25:02.851056+00:00", "level": "INFO", "logger": "mahaa.app", "message": "startup", "app": "Mahaa API", "version": "0.1.0", "environment": "development"}
+{"timestamp": "2026-10-20T15:25:03.062719+00:00", "level": "INFO", "logger": "mahaa.realtime.redis", "message": "realtime fan-out is process-local (no REDIS_URL configured)"}
+{"timestamp": "2026-10-20T15:25:03.064715+00:00", "level": "INFO", "logger": "mahaa.realtime.runtime", "message": "realtime runtime started", "cross_instance": false, "max_connections": 0}
+{"timestamp": "2026-10-20T15:26:10.277133+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "d77aa65ffc61", "method": "GET", "path": "/api/v1/health", "status_code": 200, "duration_ms": 9.57}
+INFO:     127.0.0.1:59406 - "GET /api/v1/health HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:11.648847+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "d5cca9f6fa1f", "method": "GET", "path": "/api/v1/ready", "status_code": 200, "duration_ms": 383.83}
+INFO:     127.0.0.1:59407 - "GET /api/v1/ready HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:28.465124+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "049b0250d009", "method": "GET", "path": "/api/v1/health", "status_code": 200, "duration_ms": 1.25}
+INFO:     127.0.0.1:59423 - "GET /api/v1/health HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:28.581127+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "e039e7438a9e", "method": "GET", "path": "/api/v1/health", "status_code": 200, "duration_ms": 67.69}
+INFO:     127.0.0.1:59424 - "GET /api/v1/health HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:28.886651+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "b2fe846c-e13d-4450-be69-e4e98b062154"}
+{"timestamp": "2026-10-20T15:26:28.889648+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "45af5edd-5350-4801-a876-335df831ca2e"}
+{"timestamp": "2026-10-20T15:26:28.890693+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "f8c32144e9ab", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 394.53}
+INFO:     127.0.0.1:59423 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:28.891759+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4af5a6aa64e1", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 242.58}
+INFO:     127.0.0.1:59424 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:28.971306+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "f275c64d-cd3c-4944-851b-a7ccf1926716"}
+{"timestamp": "2026-10-20T15:26:28.972313+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4615fbdecac9", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 68.62}
+INFO:     127.0.0.1:59427 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:28.987309+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "35bfd029-f5d9-41b5-86d0-b03ca252538a"}
+{"timestamp": "2026-10-20T15:26:28.989303+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "fa1ee7cc491e", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 88.47}
+INFO:     127.0.0.1:59426 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:29.038303+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4009fd436eeb", "method": "GET", "path": "/api/v1/users/me", "status_code": 200, "duration_ms": 43.14}
+INFO:     127.0.0.1:59423 - "GET /api/v1/users/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.039305+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "a375e765-5109-47d5-a3f5-c4235d834347"}
+{"timestamp": "2026-10-20T15:26:29.042301+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "f8dd4eddcb00", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 64.23}
+INFO:     127.0.0.1:59424 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:29.054305+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "59820a7080f7", "method": "GET", "path": "/api/v1/users/me", "status_code": 200, "duration_ms": 9.43}
+INFO:     127.0.0.1:59426 - "GET /api/v1/users/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.103314+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6d1324a833d7", "method": "GET", "path": "/api/v1/users/lookup", "status_code": 200, "duration_ms": 40.31}
+INFO:     127.0.0.1:59423 - "GET /api/v1/users/lookup?query=phase21discoverabletxllbd7 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.111305+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "ea871a95-2f10-456b-8c6f-47ecb4ae0774"}
+{"timestamp": "2026-10-20T15:26:29.160729+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "35e91c6e2874", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 113.17}
+INFO:     127.0.0.1:59427 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:29.171727+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "632e75274a1d", "method": "GET", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 59.01}
+INFO:     127.0.0.1:59426 - "GET /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.178740+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3c0203c46212", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 9.37}
+INFO:     127.0.0.1:59424 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.189739+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "701ed3af83c8", "method": "GET", "path": "/api/v1/users/lookup", "status_code": 200, "duration_ms": 13.56}
+INFO:     127.0.0.1:59423 - "GET /api/v1/users/lookup?query=Phase21%20Discoverable%20tkxzom90 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.192102+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4f87c5d70512", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 7.13}
+INFO:     127.0.0.1:59427 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.204104+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b310612b21ed", "method": "GET", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 9.78}
+INFO:     127.0.0.1:59426 - "GET /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.206272+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "cbf818c1368e", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 409, "duration_ms": 9.0}
+INFO:     127.0.0.1:59424 - "POST /api/v1/auth/signup HTTP/1.1" 409 Conflict
+{"timestamp": "2026-10-20T15:26:29.216309+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "2ac790f1d7ac", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 422, "duration_ms": 4.66}
+INFO:     127.0.0.1:59427 - "POST /api/v1/auth/signup HTTP/1.1" 422 Unprocessable Entity
+{"timestamp": "2026-10-20T15:26:29.235317+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "d815f3e32d50", "method": "PUT", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 27.24}
+INFO:     127.0.0.1:59423 - "PUT /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.251316+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "2be16df4a31c", "method": "GET", "path": "/api/v1/users/lookup", "status_code": 200, "duration_ms": 10.83}
+INFO:     127.0.0.1:59426 - "GET /api/v1/users/lookup?query=Phase21%20Discoverable%20tkxzom90 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.265314+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "7cb71fc4b790", "method": "GET", "path": "/api/v1/users/lookup", "status_code": 200, "duration_ms": 9.61}
+INFO:     127.0.0.1:59423 - "GET /api/v1/users/lookup?query=phase21discoverabletxllbd7 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.283313+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "45af5edd-5350-4801-a876-335df831ca2e"}
+{"timestamp": "2026-10-20T15:26:29.285314+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b5c5a854a763", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 61.82}
+INFO:     127.0.0.1:59424 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.288311+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3236c508c4f1", "method": "PUT", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 14.53}
+INFO:     127.0.0.1:59426 - "PUT /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.296311+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "26607a0d56e3", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 6.77}
+INFO:     127.0.0.1:59427 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.305227+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "5c133b8198c5", "method": "GET", "path": "/api/v1/users/lookup", "status_code": 200, "duration_ms": 12.76}
+INFO:     127.0.0.1:59423 - "GET /api/v1/users/lookup?query=MJ-31WPR4NZ HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.319228+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4605e082053c", "method": "GET", "path": "/api/v1/users/lookup", "status_code": 200, "duration_ms": 9.67}
+INFO:     127.0.0.1:59426 - "GET /api/v1/users/lookup?query=zzz%20nobody%20matches%20tkxzom90 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.350226+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "5695874fc9ab", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 48.52}
+INFO:     127.0.0.1:59424 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T15:26:29.453231+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b4c63114ae4b", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 97.57}
+INFO:     127.0.0.1:59427 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T15:26:29.540225+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "d90373eb8298", "method": "POST", "path": "/api/v1/connections", "status_code": 201, "duration_ms": 214.61}
+INFO:     127.0.0.1:59423 - "POST /api/v1/connections HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:29.552918+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8234d21a642e", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 9.23}
+INFO:     127.0.0.1:59424 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.560916+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "9d0998d34901", "method": "GET", "path": "/api/v1/auth/me", "status_code": 401, "duration_ms": 3.33}
+INFO:     127.0.0.1:59427 - "GET /api/v1/auth/me HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T15:26:29.562376+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "bfff03f9130f", "method": "POST", "path": "/api/v1/connections", "status_code": 200, "duration_ms": 16.14}
+INFO:     127.0.0.1:59426 - "POST /api/v1/connections HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.592133+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "025ab303b131", "method": "GET", "path": "/api/v1/profile", "status_code": 401, "duration_ms": 27.51}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T15:26:29.622672+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "07f2530914db", "method": "GET", "path": "/api/v1/notifications", "status_code": 200, "duration_ms": 55.85}
+INFO:     127.0.0.1:59423 - "GET /api/v1/notifications HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.682666+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "fa76d9eaa651", "method": "POST", "path": "/api/v1/connections/a1fdafb1-a2ed-4c6b-9920-03d93ca3d5b2/accept", "status_code": 200, "duration_ms": 55.25}
+INFO:     127.0.0.1:59426 - "POST /api/v1/connections/a1fdafb1-a2ed-4c6b-9920-03d93ca3d5b2/accept HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.706661+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "7e9e1480278b", "method": "GET", "path": "/api/v1/connections", "status_code": 200, "duration_ms": 16.92}
+INFO:     127.0.0.1:59423 - "GET /api/v1/connections?status=accepted HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.725666+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6f14652aa085", "method": "GET", "path": "/api/v1/connections", "status_code": 200, "duration_ms": 14.45}
+INFO:     127.0.0.1:59426 - "GET /api/v1/connections?status=accepted HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.746672+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "d70b5479a194", "method": "POST", "path": "/api/v1/connections/a1fdafb1-a2ed-4c6b-9920-03d93ca3d5b2/accept", "status_code": 200, "duration_ms": 15.88}
+INFO:     127.0.0.1:59423 - "POST /api/v1/connections/a1fdafb1-a2ed-4c6b-9920-03d93ca3d5b2/accept HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.763669+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "5fde44b9a0c7", "method": "GET", "path": "/api/v1/profile", "status_code": 200, "duration_ms": 165.85}
+INFO:     127.0.0.1:59427 - "GET /api/v1/profile HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.778669+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "babd2da13fe2", "method": "GET", "path": "/api/v1/connections", "status_code": 200, "duration_ms": 20.97}
+INFO:     127.0.0.1:59426 - "GET /api/v1/connections HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.808671+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4eb7f4fdce75", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 37.56}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.902672+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c44f398d0115", "method": "POST", "path": "/api/v1/conversations", "status_code": 201, "duration_ms": 114.28}
+INFO:     127.0.0.1:59423 - "POST /api/v1/conversations HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:29.916926+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "944a0ae88da3", "method": "GET", "path": "/api/v1/profile", "status_code": 200, "duration_ms": 140.21}
+INFO:     127.0.0.1:59428 - "GET /api/v1/profile HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.976924+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "d6aa99890fe4", "method": "POST", "path": "/api/v1/conversations", "status_code": 200, "duration_ms": 68.68}
+INFO:     127.0.0.1:59426 - "POST /api/v1/conversations HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:29.993928+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "49f8f1d430b5", "method": "GET", "path": "/api/v1/skills/catalog", "status_code": 200, "duration_ms": 71.41}
+INFO:     127.0.0.1:59424 - "GET /api/v1/skills/catalog?limit=5&offset=0&q=react HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.012379+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6e1fdcde5a7f", "method": "GET", "path": "/api/v1/conversations", "status_code": 200, "duration_ms": 32.11}
+INFO:     127.0.0.1:59423 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.033381+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8087c5258424", "method": "GET", "path": "/api/v1/conversations", "status_code": 200, "duration_ms": 15.56}
+INFO:     127.0.0.1:59426 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.051395+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "e9eaaa31325d", "method": "GET", "path": "/api/v1/conversations", "status_code": 200, "duration_ms": 13.86}
+INFO:     127.0.0.1:59423 - "GET /api/v1/conversations HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.061374+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "9ac71d281bf2", "method": "POST", "path": "/api/v1/profile/skills", "status_code": 201, "duration_ms": 61.51}
+INFO:     127.0.0.1:59427 - "POST /api/v1/profile/skills HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.079364+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6abe7bebaf76", "method": "GET", "path": "/api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134", "status_code": 200, "duration_ms": 23.4}
+INFO:     127.0.0.1:59426 - "GET /api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.089983+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "cd4d81fc8606", "method": "GET", "path": "/api/v1/profile/skills", "status_code": 200, "duration_ms": 25.27}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile/skills?limit=100&offset=0 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.123983+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c0dd2435faa2", "method": "PATCH", "path": "/api/v1/profile/skills/851584de-3a5d-43d7-8958-c74b4299e434", "status_code": 200, "duration_ms": 29.12}
+INFO:     127.0.0.1:59427 - "PATCH /api/v1/profile/skills/851584de-3a5d-43d7-8958-c74b4299e434 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.130683+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c0d64528f513", "method": "POST", "path": "/api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages", "status_code": 201, "duration_ms": 45.01}
+INFO:     127.0.0.1:59423 - "POST /api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.157683+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b09721981a7f", "method": "GET", "path": "/api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages", "status_code": 200, "duration_ms": 21.73}
+INFO:     127.0.0.1:59426 - "GET /api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.160420+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b0c038608f81", "method": "POST", "path": "/api/v1/profile/education", "status_code": 201, "duration_ms": 31.69}
+INFO:     127.0.0.1:59424 - "POST /api/v1/profile/education HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.179412+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "055547002993", "method": "GET", "path": "/api/v1/profile/education", "status_code": 200, "duration_ms": 16.03}
+INFO:     127.0.0.1:59427 - "GET /api/v1/profile/education?limit=100&offset=0 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.187418+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6b23d71857da", "method": "GET", "path": "/api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages", "status_code": 200, "duration_ms": 25.53}
+INFO:     127.0.0.1:59423 - "GET /api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.201125+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "ba0e31f45005", "method": "DELETE", "path": "/api/v1/profile/education/cf92a6dd-aa1e-450c-8a4f-3aff54fac2d4", "status_code": 204, "duration_ms": 15.37}
+INFO:     127.0.0.1:59424 - "DELETE /api/v1/profile/education/cf92a6dd-aa1e-450c-8a4f-3aff54fac2d4 HTTP/1.1" 204 No Content
+{"timestamp": "2026-10-20T15:26:30.217123+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "62433644e943", "method": "POST", "path": "/api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/read", "status_code": 204, "duration_ms": 24.69}
+INFO:     127.0.0.1:59426 - "POST /api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/read HTTP/1.1" 204 No Content
+{"timestamp": "2026-10-20T15:26:30.227118+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "520b666ea10e", "method": "GET", "path": "/api/v1/profile/education", "status_code": 200, "duration_ms": 20.62}
+INFO:     127.0.0.1:59427 - "GET /api/v1/profile/education?limit=100&offset=0 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.240124+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "5ad6a9bebd91", "method": "GET", "path": "/api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages", "status_code": 200, "duration_ms": 19.33}
+INFO:     127.0.0.1:59423 - "GET /api/v1/conversations/a04585f7-003a-4311-9649-cbcea6407134/messages HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.268365+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "0d2cff86002a", "method": "POST", "path": "/api/v1/profile/experience", "status_code": 201, "duration_ms": 34.44}
+INFO:     127.0.0.1:59424 - "POST /api/v1/profile/experience HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.280361+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "74e56a41fc2e", "method": "GET", "path": "/api/v1/profile/experience", "status_code": 200, "duration_ms": 8.43}
+INFO:     127.0.0.1:59427 - "GET /api/v1/profile/experience?limit=100&offset=0 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.293045+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "58d1c96780fb", "method": "DELETE", "path": "/api/v1/profile/experience/4e7dfc3f-8d77-4e2b-b270-ab312d033302", "status_code": 204, "duration_ms": 10.55}
+INFO:     127.0.0.1:59424 - "DELETE /api/v1/profile/experience/4e7dfc3f-8d77-4e2b-b270-ab312d033302 HTTP/1.1" 204 No Content
+{"timestamp": "2026-10-20T15:26:30.338228+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "89c3ebbbeb84", "method": "POST", "path": "/api/v1/profile/projects", "status_code": 201, "duration_ms": 42.51}
+INFO:     127.0.0.1:59427 - "POST /api/v1/profile/projects HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.358223+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "0f20b05a0d9b", "method": "GET", "path": "/api/v1/profile/projects", "status_code": 200, "duration_ms": 16.99}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile/projects?limit=100&offset=0 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.395106+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4cf28b659904", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 32.62}
+INFO:     127.0.0.1:59427 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.409594+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "04179936bc94", "method": "POST", "path": "/api/v1/profile/experience", "status_code": 201, "duration_ms": 10.23}
+INFO:     127.0.0.1:59424 - "POST /api/v1/profile/experience HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.425667+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4c368f8c2625", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 13.49}
+INFO:     127.0.0.1:59427 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.434874+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "9a4e617b115f", "method": "GET", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 6.11}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.447530+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "7a25245e17d4", "method": "PUT", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 9.14}
+INFO:     127.0.0.1:59427 - "PUT /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.460532+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "68435dba49da", "method": "PUT", "path": "/api/v1/profile/privacy", "status_code": 200, "duration_ms": 8.75}
+INFO:     127.0.0.1:59424 - "PUT /api/v1/profile/privacy HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.490679+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "04842cc2650f", "method": "PUT", "path": "/api/v1/profile/preferences", "status_code": 200, "duration_ms": 26.09}
+INFO:     127.0.0.1:59427 - "PUT /api/v1/profile/preferences HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.521870+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "000729400e68", "method": "GET", "path": "/api/v1/profile", "status_code": 200, "duration_ms": 28.49}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.536879+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3a93b8c16e77", "method": "PATCH", "path": "/api/v1/profile", "status_code": 200, "duration_ms": 10.97}
+INFO:     127.0.0.1:59427 - "PATCH /api/v1/profile HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.545873+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "1a45e3f7ae9c", "method": "DELETE", "path": "/api/v1/profile/education/00000000-0000-0000-0000-000000000000", "status_code": 404, "duration_ms": 5.51}
+INFO:     127.0.0.1:59424 - "DELETE /api/v1/profile/education/00000000-0000-0000-0000-000000000000 HTTP/1.1" 404 Not Found
+{"timestamp": "2026-10-20T15:26:30.603454+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "12c3190b5a82", "method": "GET", "path": "/api/v1/companies/mine", "status_code": 200, "duration_ms": 54.57}
+INFO:     127.0.0.1:59427 - "GET /api/v1/companies/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.681060+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "2aa55546d174", "method": "POST", "path": "/api/v1/companies", "status_code": 201, "duration_ms": 74.38}
+INFO:     127.0.0.1:59424 - "POST /api/v1/companies HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.692059+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "cae5199cee3f", "method": "GET", "path": "/api/v1/companies/mine", "status_code": 200, "duration_ms": 6.78}
+INFO:     127.0.0.1:59427 - "GET /api/v1/companies/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.712721+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b3a7bb277cfd", "method": "GET", "path": "/api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3", "status_code": 200, "duration_ms": 18.2}
+INFO:     127.0.0.1:59424 - "GET /api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.730723+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "449f48e74182", "method": "PATCH", "path": "/api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3", "status_code": 200, "duration_ms": 14.78}
+INFO:     127.0.0.1:59427 - "PATCH /api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.749082+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "e9b173199b60", "method": "GET", "path": "/api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3/members", "status_code": 200, "duration_ms": 13.8}
+INFO:     127.0.0.1:59424 - "GET /api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3/members HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.765353+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "f3559415bd35", "method": "POST", "path": "/api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3/verification-request", "status_code": 200, "duration_ms": 12.38}
+INFO:     127.0.0.1:59427 - "POST /api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3/verification-request HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.777349+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "476f8a7a5228", "method": "GET", "path": "/api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3", "status_code": 200, "duration_ms": 7.37}
+INFO:     127.0.0.1:59424 - "GET /api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.786192+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "63d263fe1912", "method": "GET", "path": "/api/v1/companies/mine", "status_code": 403, "duration_ms": 6.08}
+INFO:     127.0.0.1:59427 - "GET /api/v1/companies/mine HTTP/1.1" 403 Forbidden
+{"timestamp": "2026-10-20T15:26:30.792874+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "ebf8ca563acf", "method": "GET", "path": "/api/v1/profile", "status_code": 403, "duration_ms": 4.21}
+INFO:     127.0.0.1:59424 - "GET /api/v1/profile HTTP/1.1" 403 Forbidden
+{"timestamp": "2026-10-20T15:26:30.801880+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "340cd31ffea6", "method": "GET", "path": "/api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3", "status_code": 403, "duration_ms": 5.85}
+INFO:     127.0.0.1:59427 - "GET /api/v1/companies/58ed10ac-0977-4f4d-9fb1-06601893f0e3 HTTP/1.1" 403 Forbidden
+{"timestamp": "2026-10-20T15:26:30.851091+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "37cba149231f", "method": "GET", "path": "/api/v1/institutions/mine", "status_code": 200, "duration_ms": 46.45}
+INFO:     127.0.0.1:59424 - "GET /api/v1/institutions/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.922084+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6bc29f447f55", "method": "POST", "path": "/api/v1/institutions", "status_code": 201, "duration_ms": 66.01}
+INFO:     127.0.0.1:59427 - "POST /api/v1/institutions HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:30.941090+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "fa6836deb364", "method": "GET", "path": "/api/v1/institutions/mine", "status_code": 200, "duration_ms": 15.61}
+INFO:     127.0.0.1:59424 - "GET /api/v1/institutions/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.958082+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3b5323aa3a10", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602", "status_code": 200, "duration_ms": 11.65}
+INFO:     127.0.0.1:59427 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:30.975582+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "72cf4702a589", "method": "PATCH", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602", "status_code": 200, "duration_ms": 14.42}
+INFO:     127.0.0.1:59424 - "PATCH /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.012075+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "edba176de43c", "method": "POST", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs", "status_code": 201, "duration_ms": 31.93}
+INFO:     127.0.0.1:59427 - "POST /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T15:26:31.023752+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "dfbe7d85822d", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs", "status_code": 200, "duration_ms": 9.2}
+INFO:     127.0.0.1:59424 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.034762+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6fcc2c2a55fe", "method": "GET", "path": "/api/v1/institutions/mine", "status_code": 200, "duration_ms": 7.74}
+INFO:     127.0.0.1:59427 - "GET /api/v1/institutions/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.051197+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c6cde8c7bc3e", "method": "PATCH", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs/ec38afef-338d-446b-8f12-380efce39136", "status_code": 200, "duration_ms": 13.26}
+INFO:     127.0.0.1:59424 - "PATCH /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs/ec38afef-338d-446b-8f12-380efce39136 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.065613+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "7824d216a9fa", "method": "POST", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/verification-request", "status_code": 200, "duration_ms": 10.74}
+INFO:     127.0.0.1:59427 - "POST /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/verification-request HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.075612+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "0f78f3eb801d", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602", "status_code": 200, "duration_ms": 6.0}
+INFO:     127.0.0.1:59424 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602 HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.085465+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "7e3c4b9f48a7", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602", "status_code": 404, "duration_ms": 7.21}
+INFO:     127.0.0.1:59427 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602 HTTP/1.1" 404 Not Found
+{"timestamp": "2026-10-20T15:26:31.096467+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6c22d81b640a", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602", "status_code": 404, "duration_ms": 7.81}
+INFO:     127.0.0.1:59424 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602 HTTP/1.1" 404 Not Found
+{"timestamp": "2026-10-20T15:26:31.107897+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "f2e2dd140237", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs", "status_code": 404, "duration_ms": 7.2}
+INFO:     127.0.0.1:59427 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs HTTP/1.1" 404 Not Found
+{"timestamp": "2026-10-20T15:26:31.119512+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6206d21b1c97", "method": "POST", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs", "status_code": 404, "duration_ms": 8.73}
+INFO:     127.0.0.1:59424 - "POST /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs HTTP/1.1" 404 Not Found
+{"timestamp": "2026-10-20T15:26:31.131725+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b03e9eccdc07", "method": "DELETE", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs/ec38afef-338d-446b-8f12-380efce39136", "status_code": 204, "duration_ms": 9.51}
+INFO:     127.0.0.1:59427 - "DELETE /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs/ec38afef-338d-446b-8f12-380efce39136 HTTP/1.1" 204 No Content
+{"timestamp": "2026-10-20T15:26:31.142734+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "524ed2f5afa8", "method": "GET", "path": "/api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs", "status_code": 200, "duration_ms": 6.65}
+INFO:     127.0.0.1:59424 - "GET /api/v1/institutions/80e47e4a-8cdd-4320-9df1-d7786056f602/programs HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.147089+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "0ff24e4897e3", "method": "GET", "path": "/api/v1/health", "status_code": 200, "duration_ms": 0.91}
+INFO:     127.0.0.1:59427 - "GET /api/v1/health HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.155094+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4e030c1938a2", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 3.83}
+INFO:     127.0.0.1:59424 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T15:26:31.163090+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8be079a812e1", "method": "PATCH", "path": "/api/v1/profile", "status_code": 422, "duration_ms": 4.69}
+INFO:     127.0.0.1:59427 - "PATCH /api/v1/profile HTTP/1.1" 422 Unprocessable Entity
+{"timestamp": "2026-10-20T17:54:02.283335+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "2e180646743f", "method": "GET", "path": "/openapi.json", "status_code": 200, "duration_ms": 1164.23}
+INFO:     127.0.0.1:63510 - "GET /openapi.json HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:54:59.132580+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "b7751668-84f2-4a9b-ab1f-b732c66d1165"}
+{"timestamp": "2026-10-20T17:54:59.148587+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6cedae32b1c4", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 328.29}
+INFO:     127.0.0.1:56834 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T17:54:59.539725+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "b7751668-84f2-4a9b-ab1f-b732c66d1165"}
+{"timestamp": "2026-10-20T17:54:59.541435+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6a981f2542bc", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 305.55}
+INFO:     127.0.0.1:56834 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:54:59.627228+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "15752215e63e", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 53.17}
+INFO:     127.0.0.1:56834 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T17:54:59.682782+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "563fbad74575", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 6.63}
+INFO:     127.0.0.1:56834 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:54:59.768372+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "dbd458b970b8", "method": "GET", "path": "/api/v1/onboarding/state", "status_code": 200, "duration_ms": 73.23}
+INFO:     127.0.0.1:56834 - "GET /api/v1/onboarding/state HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:54:59.879721+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "af1973e35493", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 60.08}
+INFO:     127.0.0.1:56834 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:54:59.943414+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "1a3bc76004a0", "method": "GET", "path": "/api/v1/courses", "status_code": 200, "duration_ms": 56.62}
+INFO:     127.0.0.1:56834 - "GET /api/v1/courses HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:55:00.027537+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "473422adf91f", "method": "POST", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment", "status_code": 201, "duration_ms": 65.11}
+INFO:     127.0.0.1:56834 - "POST /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T17:55:00.060537+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c180aad57a62", "method": "GET", "path": "/api/v1/courses/enrollments/mine", "status_code": 200, "duration_ms": 27.87}
+INFO:     127.0.0.1:56834 - "GET /api/v1/courses/enrollments/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:55:00.126534+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "1bdc8aef9ed1", "method": "GET", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d", "status_code": 200, "duration_ms": 34.8}
+INFO:     127.0.0.1:56834 - "GET /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:55:00.163536+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b1b4a3d4a352", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 12.66}
+INFO:     127.0.0.1:56834 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T17:55:00.221155+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "a6b419db627c", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 5.42}
+INFO:     127.0.0.1:56834 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:04:22.939031+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c2d63ca1b7db", "method": "GET", "path": "/api/v1/health", "status_code": 200, "duration_ms": 21.45}
+INFO:     127.0.0.1:51908 - "GET /api/v1/health HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:04:23.190600+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "c0423938-0a03-4605-811d-f623688f9836"}
+{"timestamp": "2026-10-20T18:04:23.192598+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "183aa9ca12b5", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 110.23}
+INFO:     127.0.0.1:51908 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:04:23.313766+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c2022c2cb735", "method": "GET", "path": "/api/v1/onboarding/state", "status_code": 200, "duration_ms": 71.86}
+INFO:     127.0.0.1:51908 - "GET /api/v1/onboarding/state HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:04:23.378177+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8ae3ea7b5811", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 21.54}
+INFO:     127.0.0.1:51908 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:18.764615+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "1753095b-f8ec-405c-9f5b-5bedb9d8cffe"}
+{"timestamp": "2026-10-20T18:06:18.767614+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "24a6aa4e43af", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 57.11}
+INFO:     127.0.0.1:57596 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:06:18.937613+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "1753095b-f8ec-405c-9f5b-5bedb9d8cffe"}
+{"timestamp": "2026-10-20T18:06:18.938275+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "cd6c5c303dd1", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 53.14}
+INFO:     127.0.0.1:57596 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:18.998632+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "23725e93bc75", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 46.58}
+INFO:     127.0.0.1:57596 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:06:19.046599+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3fa50986fd4e", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 4.81}
+INFO:     127.0.0.1:57596 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.075601+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "cec04c36916c", "method": "GET", "path": "/api/v1/onboarding/state", "status_code": 200, "duration_ms": 16.13}
+INFO:     127.0.0.1:57596 - "GET /api/v1/onboarding/state HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.165675+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "82a8cb05d916", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 16.08}
+INFO:     127.0.0.1:57596 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.348678+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "ea20d744d729", "method": "GET", "path": "/api/v1/courses", "status_code": 200, "duration_ms": 31.25}
+INFO:     127.0.0.1:57596 - "GET /api/v1/courses HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.378666+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "77deea3e44bf", "method": "POST", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment", "status_code": 201, "duration_ms": 17.88}
+INFO:     127.0.0.1:57596 - "POST /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:06:19.397662+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "82c75eb2e244", "method": "GET", "path": "/api/v1/courses/enrollments/mine", "status_code": 200, "duration_ms": 13.9}
+INFO:     127.0.0.1:57596 - "GET /api/v1/courses/enrollments/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.427667+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "828482c5f41b", "method": "GET", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d", "status_code": 200, "duration_ms": 16.16}
+INFO:     127.0.0.1:57596 - "GET /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.450660+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "93349da9351e", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 14.78}
+INFO:     127.0.0.1:57596 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:06:19.484893+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "9b97c4d45ed3", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 4.3}
+INFO:     127.0.0.1:57596 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:07:12.508812+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "bd8c2dfd-7db1-4263-8bc4-7525e8fab17d"}
+{"timestamp": "2026-10-20T18:07:12.510858+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "55d5c14a13c7", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 56.33}
+INFO:     127.0.0.1:49673 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:07:12.595847+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "32bd4e5bcc95", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 44.18}
+INFO:     127.0.0.1:49673 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:07:12.660477+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "525e0a6cc00b", "method": "GET", "path": "/api/v1/courses", "status_code": 200, "duration_ms": 14.74}
+INFO:     127.0.0.1:49673 - "GET /api/v1/courses HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:07:12.706492+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "df83002eda19", "method": "POST", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment", "status_code": 201, "duration_ms": 30.45}
+INFO:     127.0.0.1:49673 - "POST /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:07:12.735432+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8d13dc32f7bb", "method": "GET", "path": "/api/v1/courses/enrollments/mine", "status_code": 200, "duration_ms": 13.19}
+INFO:     127.0.0.1:49673 - "GET /api/v1/courses/enrollments/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:07:12.773440+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8b41a5475050", "method": "GET", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d", "status_code": 200, "duration_ms": 20.94}
+INFO:     127.0.0.1:49673 - "GET /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:07:12.788442+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "26d91f52444c", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 10.29}
+INFO:     127.0.0.1:49673 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:07:12.810642+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "586cfad8c151", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 6.32}
+INFO:     127.0.0.1:49673 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.346794+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "0a90d9b9-c73b-4ac8-b207-ea897d43d4bb"}
+{"timestamp": "2026-10-20T18:10:14.349096+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "47102b02141c", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 632.32}
+INFO:     127.0.0.1:59344 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:10:14.582099+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "0a90d9b9-c73b-4ac8-b207-ea897d43d4bb"}
+{"timestamp": "2026-10-20T18:10:14.583606+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "00743697dc10", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 97.1}
+INFO:     127.0.0.1:59344 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.673518+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "e1b66a22d624", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 50.2}
+INFO:     127.0.0.1:59344 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:10:14.723301+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "1a06355e8846", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 3.97}
+INFO:     127.0.0.1:59344 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.754289+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "ca6cb124c593", "method": "GET", "path": "/api/v1/onboarding/state", "status_code": 200, "duration_ms": 17.71}
+INFO:     127.0.0.1:59344 - "GET /api/v1/onboarding/state HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.848680+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3d820ba23f17", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 18.98}
+INFO:     127.0.0.1:59344 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.896682+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "676007489922", "method": "GET", "path": "/api/v1/courses", "status_code": 200, "duration_ms": 14.74}
+INFO:     127.0.0.1:59344 - "GET /api/v1/courses HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.931681+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "dfbcd99c7830", "method": "POST", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment", "status_code": 201, "duration_ms": 22.2}
+INFO:     127.0.0.1:59344 - "POST /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:10:14.950684+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4475b66333ee", "method": "GET", "path": "/api/v1/courses/enrollments/mine", "status_code": 200, "duration_ms": 10.81}
+INFO:     127.0.0.1:59344 - "GET /api/v1/courses/enrollments/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:14.993692+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "2992350b8312", "method": "GET", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d", "status_code": 200, "duration_ms": 13.11}
+INFO:     127.0.0.1:59344 - "GET /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:15.025679+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "a5e4fa432b7a", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 9.93}
+INFO:     127.0.0.1:59344 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:15.075915+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b9f59559ee7c", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 4.33}
+INFO:     127.0.0.1:59344 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:10:15.174284+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "0a90d9b9-c73b-4ac8-b207-ea897d43d4bb"}
+{"timestamp": "2026-10-20T18:10:15.175679+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "1a811716bb4a", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 57.22}
+INFO:     127.0.0.1:59344 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:11:08.620686+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "4b8a8148-5471-4c9e-95eb-f866ac8fddc4"}
+{"timestamp": "2026-10-20T18:11:08.621696+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "39358961769c", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 56.74}
+INFO:     127.0.0.1:55665 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:11:08.705698+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "485bf19e5278", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 54.47}
+INFO:     127.0.0.1:55665 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:11:08.812584+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "714f8701767e", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 53.37}
+INFO:     127.0.0.1:55665 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:14:35.932782+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "35a77d6e-c102-46e6-9863-783a32647c70"}
+{"timestamp": "2026-10-20T18:14:35.933788+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "27bc7d5af23c", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 59.4}
+INFO:     127.0.0.1:60977 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:14:36.075794+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "35a77d6e-c102-46e6-9863-783a32647c70"}
+{"timestamp": "2026-10-20T18:14:36.077790+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "ac9f05bafc31", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 61.04}
+INFO:     127.0.0.1:60977 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.136300+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "52491b582920", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 47.68}
+INFO:     127.0.0.1:60977 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:14:36.162320+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "69d0ec3a9945", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 4.75}
+INFO:     127.0.0.1:60977 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.198316+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "70035fe80328", "method": "GET", "path": "/api/v1/onboarding/state", "status_code": 200, "duration_ms": 22.45}
+INFO:     127.0.0.1:60977 - "GET /api/v1/onboarding/state HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.283310+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "3b087cd0e8a6", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 18.79}
+INFO:     127.0.0.1:60977 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.313311+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c31e8914dd0e", "method": "GET", "path": "/api/v1/courses", "status_code": 200, "duration_ms": 12.08}
+INFO:     127.0.0.1:60977 - "GET /api/v1/courses HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.341312+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "8cd971c1ae09", "method": "POST", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment", "status_code": 201, "duration_ms": 16.19}
+INFO:     127.0.0.1:60977 - "POST /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:14:36.358318+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "dc09a25c1dfa", "method": "GET", "path": "/api/v1/courses/enrollments/mine", "status_code": 200, "duration_ms": 12.56}
+INFO:     127.0.0.1:60977 - "GET /api/v1/courses/enrollments/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.382318+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "c3f626049c68", "method": "GET", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d", "status_code": 200, "duration_ms": 14.23}
+INFO:     127.0.0.1:60977 - "GET /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.412314+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "b8980394cdb2", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 16.53}
+INFO:     127.0.0.1:60977 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.442308+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "bf125ede8e44", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 4.82}
+INFO:     127.0.0.1:60977 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:14:36.519312+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "35a77d6e-c102-46e6-9863-783a32647c70"}
+{"timestamp": "2026-10-20T18:14:36.522316+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "0a48f68fff14", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 57.8}
+INFO:     127.0.0.1:60977 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.034683+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "account created", "user_id": "c39dd145-6379-44e1-ad27-30ab438462de"}
+{"timestamp": "2026-10-20T18:16:21.035678+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "355e86a55ae5", "method": "POST", "path": "/api/v1/auth/signup", "status_code": 201, "duration_ms": 61.61}
+INFO:     127.0.0.1:54576 - "POST /api/v1/auth/signup HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:16:21.174676+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "c39dd145-6379-44e1-ad27-30ab438462de"}
+{"timestamp": "2026-10-20T18:16:21.176675+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "025d49ff9e4c", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 53.4}
+INFO:     127.0.0.1:54576 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.234676+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "63984ed86b86", "method": "POST", "path": "/api/v1/auth/login", "status_code": 401, "duration_ms": 44.98}
+INFO:     127.0.0.1:54576 - "POST /api/v1/auth/login HTTP/1.1" 401 Unauthorized
+{"timestamp": "2026-10-20T18:16:21.262491+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "bae1ca00806b", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 4.5}
+INFO:     127.0.0.1:54576 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.288842+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "e30f6af0cb06", "method": "GET", "path": "/api/v1/onboarding/state", "status_code": 200, "duration_ms": 13.98}
+INFO:     127.0.0.1:54576 - "GET /api/v1/onboarding/state HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.376844+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "ef6a238eb9eb", "method": "GET", "path": "/api/v1/profile/completeness", "status_code": 200, "duration_ms": 21.51}
+INFO:     127.0.0.1:54576 - "GET /api/v1/profile/completeness HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.409840+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "dff628681351", "method": "GET", "path": "/api/v1/courses", "status_code": 200, "duration_ms": 13.54}
+INFO:     127.0.0.1:54576 - "GET /api/v1/courses HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.454851+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "4c08305e9543", "method": "POST", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment", "status_code": 201, "duration_ms": 32.97}
+INFO:     127.0.0.1:54576 - "POST /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d/enrollment HTTP/1.1" 201 Created
+{"timestamp": "2026-10-20T18:16:21.473850+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "72fee7743ab3", "method": "GET", "path": "/api/v1/courses/enrollments/mine", "status_code": 200, "duration_ms": 12.85}
+INFO:     127.0.0.1:54576 - "GET /api/v1/courses/enrollments/mine HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.504842+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "6a943f61a184", "method": "GET", "path": "/api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d", "status_code": 200, "duration_ms": 20.84}
+INFO:     127.0.0.1:54576 - "GET /api/v1/courses/542f53aa-d1a5-413d-b7e3-ac7cac97f24d HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.527846+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "fb48a2069918", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 13.56}
+INFO:     127.0.0.1:54576 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.558840+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "85716244a7c2", "method": "GET", "path": "/api/v1/auth/me", "status_code": 200, "duration_ms": 7.52}
+INFO:     127.0.0.1:54576 - "GET /api/v1/auth/me HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.634851+00:00", "level": "INFO", "logger": "mahaa.auth", "message": "signed in", "user_id": "c39dd145-6379-44e1-ad27-30ab438462de"}
+{"timestamp": "2026-10-20T18:16:21.635843+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "7640a5e5cdb9", "method": "POST", "path": "/api/v1/auth/login", "status_code": 200, "duration_ms": 52.46}
+INFO:     127.0.0.1:54576 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+{"timestamp": "2026-10-20T18:16:21.678723+00:00", "level": "INFO", "logger": "mahaa.app", "message": "request", "request_id": "eecb2a50ecce", "method": "POST", "path": "/api/v1/users/me/deactivate", "status_code": 200, "duration_ms": 9.39}
+INFO:     127.0.0.1:54576 - "POST /api/v1/users/me/deactivate HTTP/1.1" 200 OK

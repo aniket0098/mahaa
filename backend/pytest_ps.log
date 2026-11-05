@@ -1,0 +1,11 @@
+﻿python.exe : ImportError while loading conftest 'C:\mahaa\backend\tests\conftest.py'.
+At line:1 char:1
++ & 'C:\mahaa\backend\.venv\Scripts\python.exe' -m pytest 'C:\mahaa\bac ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ImportError whi...s\conftest.py'.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+backend\tests\conftest.py:179: in <module>
+    from app.models import Skill  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'app.models'

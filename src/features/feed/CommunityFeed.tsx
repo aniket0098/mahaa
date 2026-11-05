@@ -127,8 +127,14 @@ export function CommunityFeed({
             )}
           </View>
         </Card>
+      // `removeClippedSubviews` is safe only while cards measure their own
+      // offsets and the coordinator registers layouts — clipping removes
+      // native views, never components.
       ) : (
-        <View style={styles.list} onLayout={({ nativeEvent }) => setListY(nativeEvent.layout.y)}>
+        <View
+          style={styles.list}
+          removeClippedSubviews={view.posts.length > 8}
+          onLayout={({ nativeEvent }) => setListY(nativeEvent.layout.y)}>
           {view.posts.map((post) => (
             <FeedPostCard
               key={post.id}

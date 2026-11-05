@@ -64,6 +64,16 @@ export const notificationQueryKeys = {
 };
 
 /**
+ * The call keys Phase 14 owns. History lives under the conversation; one live
+ * call row has its own top-level key so the active screen can track one
+ * lifecycle without refetching a list.
+ */
+export const callQueryKeys = {
+  history: (conversationId: string) => ['conversations', conversationId, 'calls'] as const,
+  detail: (callId: string) => ['calls', callId] as const,
+};
+
+/**
  * The content keys a `post.*` or `story.*` event refreshes.
  *
  * **Taken from `queryKeys`, not re-declared.** An invalidation typed out here
@@ -79,6 +89,136 @@ const CONTENT_QUERY_KEYS = {
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * Active-call routing. A call cannot be conveyed by cache invalidation alone:
+ * the callee must *navigate* to a ringing screen even when no call query is
+ * mounted, and the caller must move on when accept lands. So the bridge
+ * exposes pub/sub for the three participant-targeted events, and the screens
+ * answer each by re-fetching the authoritative row over REST. No token, room
+ * URL or media value ever crosses this boundary — the token is minted on
+ * demand from the token endpoint.
+ */
+export type IncomingCallPayload = {
+  callId: string;
+  conversationId: string;
+  callerUserId: string;
+  mode: 'audio' | 'video';
+};
+
+export type CallAcceptedPayload = {
+  callId: string;
+  conversationId: string;
+  calleeUserId: string;
+};
+
+export type CallEndedPayload = {
+  callId: string;
+  conversationId: string;
+  status: string;
+  endedByUserId: string | null;
+};
+
+type CallListener<T> = (payload: T) => void;
+
+const incomingListeners = new Set<CallListener<IncomingCallPayload>>();
+const acceptedListeners = new Set<CallListener<CallAcceptedPayload>>();
+const endedListeners = new Set<CallListener<CallEndedPayload>>();
+
+/** Observe `call.incoming` (callee side). Returns an unsubscribe fn. */
+export function onIncomingCall(listener: CallListener<IncomingCallPayload>): () => void {
+  incomingListeners.add(listener);
+  return () => {
+    incomingListeners.delete(listener);
+  };
+}
+
+/** Observe `call.accepted` (caller side). Returns an unsubscribe fn. */
+export function onCallAccepted(listener: CallListener<CallAcceptedPayload>): () => void {
+  acceptedListeners.add(listener);
+  return () => {
+    acceptedListeners.delete(listener);
+  };
+}
+
+/** Observe `call.ended` (both sides). Returns an unsubscribe fn. */
+export function onCallEnded(listener: CallListener<CallEndedPayload>): () => void {
+  endedListeners.add(listener);
+  return () => {
+    endedListeners.delete(listener);
+  };
+}
+
+function notifyCall<T>(listeners: Set<CallListener<T>>, payload: T): void {
+  for (const listener of listeners) {
+    try {
+      listener(payload);
+    } catch {
+      // One throwing screen must not stop the others.
+    }
+  }
+}
+
+/**
+ * Parse a call event into its routing payload — a bad frame is dropped, never
+ * thrown, so one malformed message must not take down the connection.
+ */
+export function emitCallEvent(event: RealtimeEvent): void {
+  const { event_type: type, payload } = event;
+  if (type === 'call.incoming') {
+    const callId = str(payload.call_id);
+    const conversationId = str(payload.conversation_id);
+    const callerUserId = str(payload.caller_user_id);
+    const mode = str(payload.mode);
+    if (!callId || !conversationId || !callerUserId || (mode !== 'audio' && mode !== 'video')) {
+      return;
+    }
+    notifyCall(incomingListeners, { callId, conversationId, callerUserId, mode });
+  } else if (type === 'call.accepted') {
+    const callId = str(payload.call_id);
+    const conversationId = str(payload.conversation_id);
+    const calleeUserId = str(payload.callee_user_id);
+    if (!callId || !conversationId || !calleeUserId) return;
+    notifyCall(acceptedListeners, { callId, conversationId, calleeUserId });
+  } else if (type === 'call.ended') {
+    const callId = str(payload.call_id);
+    const conversationId = str(payload.conversation_id);
+    const status = str(payload.status);
+    if (!callId || !conversationId || !status) return;
+    const endedBy = payload.ended_by_user_id;
+    notifyCall(endedListeners, {
+      callId,
+      conversationId,
+      status,
+      endedByUserId: typeof endedBy === 'string' && endedBy.length > 0 ? endedBy : null,
+    });
+  }
+}
+
+/**
+ * Wire a call event into cache effects and active-call routing. Returns true
+ * when the event did something, so the dispatch site can report it.
+ */
+export function applyCallEvent(event: RealtimeEvent): boolean {
+  const { event_type: type, payload } = event;
+  if (type !== 'call.incoming' && type !== 'call.accepted' && type !== 'call.ended') {
+    return false;
+  }
+  // Route to the active-call screens first; `emitCallEvent` validates.
+  emitCallEvent(event);
+  const conversationId = str(payload.conversation_id);
+  // Even without a conversation id the routing above still ran, so report
+  // handled — but there is no cache key worth touching.
+  if (!conversationId) return true;
+  void queryClient.invalidateQueries({
+    queryKey: callQueryKeys.history(conversationId),
+  });
+  // The list carries the last-call preview, so it can change too.
+  void queryClient.invalidateQueries({
+    queryKey: messagingQueryKeys.conversations,
+  });
+  return true;
 }
 
 /**
@@ -101,6 +241,27 @@ export function applyRealtimeEvent(event: RealtimeEvent): boolean {
         queryKey: messagingQueryKeys.conversations,
       });
       return true;
+    }
+    case 'message.updated': {
+      // An edit restamps one bubble in place. Refresh it the same way, because
+      // the list preview is the row's own last message and can change too --
+      // but the detail (members, unread) cannot, so it is left alone.
+      const conversationId = str(event.payload.conversation_id);
+      if (!conversationId) return false;
+      void queryClient.invalidateQueries({
+        queryKey: messagingQueryKeys.messages(conversationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: messagingQueryKeys.conversations,
+      });
+      return true;
+    }
+    case 'call.incoming':
+    case 'call.accepted':
+    case 'call.ended': {
+      // Routing + cache effects both live in applyCallEvent: the active-call
+      // screens navigate from it, and history refreshes from the same event.
+      return applyCallEvent(event);
     }
 
     case 'conversation.read': {

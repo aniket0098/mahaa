@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from app.models import Conversation, ConversationMember, Message, User
+from app.models import Conversation, ConversationMember, Message, Notification, User
 from app.models.enums import UserStatus
 from tests.conftest import REJECTION_ERRORS, register
 
@@ -41,6 +41,7 @@ MESSAGING_ROUTES = [
     ("post", f"/api/v1/conversations/{NOBODY}/messages", {"body": "hi"}),
     ("post", f"/api/v1/conversations/{NOBODY}/read", {"message_id": NOBODY}),
     ("delete", f"/api/v1/messages/{NOBODY}", None),
+    ("patch", f"/api/v1/messages/{NOBODY}", {"body": "hi"}),
 ]
 
 ROUTE_IDS = [f"{method.upper()} {path}" for method, path, _ in MESSAGING_ROUTES]
@@ -744,6 +745,23 @@ def test_sending_advances_the_conversation_pointer(
     assert body["last_message_at"] is not None
 
 
+def test_a_sent_message_creates_no_notification_row(
+    api_client, thread, candidate, other_candidate, db_session
+):
+    """§13's inbox is for connection events: a chat message creates a message
+    row, never a notification row, so it never inflates the badge or the
+    Notifications list. Client-side filtering is the belt; this is the brace."""
+    before = len(_rows(db_session, Notification))
+    _send(api_client, other_candidate, thread["id"], "Hello from the other side")
+    after = len(_rows(db_session, Notification))
+
+    assert after == before, "sending a message must not create a notification row"
+    assert any(
+        message.body == "Hello from the other side"
+        for message in _rows(db_session, Message)
+    )
+
+
 # --- reading, ordering and pagination ----------------------------------------
 
 
@@ -1379,7 +1397,11 @@ def test_a_message_exposes_no_private_fields(
         "created_at",
         "edited_at",
         "deleted_at",
+        # The optional photo/video attachment. Present on every message so the
+        # client reads one shape; null for a text-only message.
+        "media",
     }
+    assert sent["media"] is None
     assert set(sent["sender"]) == {
         "user_id",
         "public_id",
@@ -1446,3 +1468,242 @@ def test_a_private_profile_does_not_change_a_message(
     items = _messages(api_client, other_candidate, thread["id"])["items"]
 
     assert items[0] == before
+
+
+# --- editing (Phase 14) ------------------------------------------------------
+#
+# ``PATCH /messages/{id}``. The A/B/C triangle again: A edits, B reads it back,
+# C must not reach it. The rules under test are the ones the service states —
+# author-only answered with the same 404 as "unknown id", a tombstone is final,
+# identical text is a no-op that does not stamp ``edited_at``, and the server
+# owns the clock.
+
+
+def _edit(api_client, account, message_id: str, body: str, **extra):
+    return api_client.patch(
+        f"/api/v1/messages/{message_id}",
+        json={"body": body, **extra},
+        headers=account.headers,
+    )
+
+
+def test_the_author_can_edit_and_gets_the_canonical_row(
+    api_client, thread, candidate
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "frist draft")
+
+    response = _edit(api_client, candidate, sent["id"], "first draft")
+
+    assert response.status_code == 200, response.text
+    edited = response.json()
+    assert edited["body"] == "first draft"
+    assert edited["edited_at"] is not None
+    # Identity and ordering are untouched by an edit.
+    assert edited["id"] == sent["id"]
+    assert edited["conversation_id"] == sent["conversation_id"]
+    assert edited["created_at"] == sent["created_at"]
+    assert edited["client_message_id"] == sent["client_message_id"]
+    assert edited["sender"] == sent["sender"]
+
+
+def test_the_edit_is_persisted_and_readable_by_the_recipient(
+    api_client, thread, candidate, other_candidate
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "v1")
+    assert _edit(api_client, candidate, sent["id"], "v2").status_code == 200
+
+    items = _messages(api_client, other_candidate, thread["id"])["items"]
+    match = next(item for item in items if item["id"] == sent["id"])
+
+    assert match["body"] == "v2"
+    assert match["edited_at"] is not None
+
+
+def test_the_recipient_cannot_edit_a_message_they_did_not_send(
+    api_client, thread, candidate, other_candidate
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "mine")
+
+    response = _edit(api_client, other_candidate, sent["id"], "theirs")
+
+    # Same 404 as an unknown id: a distinct "not the author" would confirm the
+    # message to somebody who has no business probing for it.
+    assert response.status_code == 404, response.text
+    assert response.json()["error"]["code"] == "not_found"
+    items = _messages(api_client, candidate, thread["id"])["items"]
+    assert next(i for i in items if i["id"] == sent["id"])["body"] == "mine"
+
+
+def test_an_unrelated_user_cannot_edit(api_client, thread, candidate, stranger) -> None:
+    sent = _send(api_client, candidate, thread["id"], "mine")
+
+    response = _edit(api_client, stranger, sent["id"], "tampered")
+
+    assert response.status_code == 404, response.text
+
+
+def test_an_unknown_message_id_is_404(api_client, candidate) -> None:
+    response = _edit(api_client, candidate, NOBODY, "anything")
+    assert response.status_code == 404, response.text
+
+
+def test_editing_a_deleted_message_is_refused(api_client, thread, candidate) -> None:
+    """A tombstone is final — the row keeps its slot with no body (§14.6)."""
+
+    sent = _send(api_client, candidate, thread["id"], "goodbye")
+    deleted = api_client.delete(
+        f"/api/v1/messages/{sent['id']}", headers=candidate.headers
+    )
+    assert deleted.status_code == 204, deleted.text
+
+    response = _edit(api_client, candidate, sent["id"], "resurrected")
+
+    assert response.status_code == 404, response.text
+    items = _messages(api_client, candidate, thread["id"])["items"]
+    tombstone = next(i for i in items if i["id"] == sent["id"])
+    assert tombstone["body"] is None
+    assert tombstone["deleted_at"] is not None
+
+
+def test_identical_text_is_a_no_op_that_does_not_stamp_edited_at(
+    api_client, thread, candidate
+) -> None:
+    """A double-tapped Save must not manufacture a misleading "Edited" label."""
+
+    sent = _send(api_client, candidate, thread["id"], "same")
+
+    response = _edit(api_client, candidate, sent["id"], "same")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["edited_at"] is None
+
+
+def test_the_server_rejects_a_client_supplied_edited_at(
+    api_client, thread, candidate
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "clock check")
+
+    response = _edit(
+        api_client,
+        candidate,
+        sent["id"],
+        "forged",
+        edited_at="2020-01-01T00:00:00+00:00",
+    )
+
+    assert response.status_code == 422, response.text
+
+
+def test_a_client_cannot_retarget_the_author_or_conversation(
+    api_client, thread, candidate, other_candidate
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "original")
+
+    response = _edit(
+        api_client,
+        candidate,
+        sent["id"],
+        "retargeted",
+        sender_id=str(other_candidate.id),
+        conversation_id=NOBODY,
+    )
+
+    assert response.status_code == 422, response.text
+    items = _messages(api_client, candidate, thread["id"])["items"]
+    assert next(i for i in items if i["id"] == sent["id"])["body"] == "original"
+
+
+@pytest.mark.parametrize(
+    "body", ["", "   ", "\t\n"], ids=["empty", "spaces", "whitespace"]
+)
+def test_blank_text_is_422(api_client, thread, candidate, body) -> None:
+    sent = _send(api_client, candidate, thread["id"], "keep")
+
+    response = _edit(api_client, candidate, sent["id"], body)
+
+    assert response.status_code == 422, response.text
+
+
+def test_oversized_text_is_422(api_client, thread, candidate) -> None:
+    sent = _send(api_client, candidate, thread["id"], "small")
+
+    response = _edit(api_client, candidate, sent["id"], "x" * (MAX_BODY + 1))
+
+    assert response.status_code == 422, response.text
+
+
+def test_the_maximum_length_is_accepted(api_client, thread, candidate) -> None:
+    sent = _send(api_client, candidate, thread["id"], "small")
+
+    response = _edit(api_client, candidate, sent["id"], "x" * MAX_BODY)
+
+    assert response.status_code == 200, response.text
+    assert len(response.json()["body"]) == MAX_BODY
+
+
+def test_the_conversation_preview_shows_the_edited_body(
+    api_client, thread, candidate
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "draft title")
+    assert _edit(api_client, candidate, sent["id"], "final title").status_code == 200
+
+    listed = _conversations(api_client, candidate)
+    match = next(item for item in listed if item["id"] == thread["id"])
+
+    assert match["last_message"]["body"] == "final title"
+    assert match["last_message"]["edited_at"] is not None
+
+
+def test_an_edit_does_not_reset_the_recipients_unread_count(
+    api_client, thread, candidate, other_candidate
+) -> None:
+    """An edit is not a new message — it must not re-surface as unread."""
+
+    sent = _send(api_client, candidate, thread["id"], "read this")
+    items = _messages(api_client, other_candidate, thread["id"])["items"]
+    read = api_client.post(
+        f"/api/v1/conversations/{thread['id']}/read",
+        json={"message_id": items[-1]["id"]},
+        headers=other_candidate.headers,
+    )
+    assert read.status_code == 204, read.text
+    assert _unread(api_client, other_candidate, thread["id"]) == 0
+
+    assert _edit(api_client, candidate, sent["id"], "edited copy").status_code == 200
+
+    assert _unread(api_client, other_candidate, thread["id"]) == 0
+
+
+def test_editing_does_not_create_a_second_row(
+    api_client, thread, candidate, db_session
+) -> None:
+    sent = _send(api_client, candidate, thread["id"], "once")
+    before = len(_rows(db_session, Message))
+
+    assert _edit(api_client, candidate, sent["id"], "twice").status_code == 200
+    db_session.expire_all()
+
+    assert len(_rows(db_session, Message)) == before
+
+
+def test_the_message_list_order_is_unchanged_by_an_edit(
+    api_client, thread, candidate, other_candidate
+) -> None:
+    """An edit must not reorder the thread — ids and positions stay stable.
+
+    The order is captured *before* the edit rather than assumed from send order:
+    two sends in the same instant tie on ``created_at`` and the keyset breaks the
+    tie by id, so "first sent is index 0" is not a guarantee the edit could
+    violate anyway. What an edit could plausibly break is the order itself.
+    """
+
+    _send(api_client, candidate, thread["id"], "first")
+    second = _send(api_client, other_candidate, thread["id"], "second")
+    before = [item["id"] for item in _messages(api_client, candidate, thread["id"])["items"]]
+
+    assert _edit(api_client, other_candidate, second["id"], "second (edited)").status_code == 200
+
+    after = [item["id"] for item in _messages(api_client, candidate, thread["id"])["items"]]
+    assert after == before
+
+

@@ -70,4 +70,8 @@ export const landingStyles = StyleSheet.create({
   closingButton: {
     marginTop: spacing.sm,
   },
+  sessionRetry: {
+    paddingHorizontal: spacing.pagePadding,
+    paddingTop: spacing.lg,
+  },
 });

@@ -30,14 +30,17 @@
  * theatre rather than error handling.
  */
 
-import { useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useState, useSyncExternalStore } from 'react';
 import { Pressable, View, type LayoutChangeEvent } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { AppIcon } from '@/components/ui/AppIcon';
 import { AppText } from '@/components/ui/AppText';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { StatusBanner } from '@/components/ui/StatusBanner';
+import { deletePost } from '@/api/posts';
+import { queryKeys } from '@/api/queryKeys';
 import { useAuthorConnection } from '@/features/connection/useAuthorConnection';
 import { AchievementBlock } from '@/features/feed/AchievementBlock';
 import { CommentsSheet } from '@/features/feed/CommentsSheet';
@@ -83,7 +86,7 @@ export interface FeedPostCardProps {
   onOpenLink: (url: string) => void;
 }
 
-export function FeedPostCard({ post, baseOffset = 0, onOpenProfile, onOpenLink }: FeedPostCardProps) {
+function FeedPostCardInner({ post, baseOffset = 0, onOpenProfile, onOpenLink }: FeedPostCardProps) {
   // One subscription per card. A save or a hide changes the module store, and
   // this is what re-renders the card against the new value. (Likes are server
   // state now and arrive through React Query instead.)
@@ -95,6 +98,10 @@ export function FeedPostCard({ post, baseOffset = 0, onOpenProfile, onOpenLink }
 
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Delete runs in the card (not the menu) because the card owns the cache the
+  // removed post has to vanish from.
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -162,6 +169,52 @@ export function FeedPostCard({ post, baseOffset = 0, onOpenProfile, onOpenLink }
         connection.error ||
         saved,
     );
+
+  const queryClient = useQueryClient();
+
+  /**
+   * Delete this post on the server, then remove it from every cached face of
+   * the feed so it cannot come back.
+   *
+   * The order is deliberate: the cache is cleared only AFTER the 204, so a
+   * failed request leaves the card exactly where it was and the menu shows the
+   * server's message instead. The immediate setQueryData makes the card
+   * disappear in the same tick as the response; the invalidation that follows
+   * re-reads GET /posts and GET /posts/mine, so navigating away and back cannot
+   * resurrect it from a stale page.
+   */
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deletePost(post.id);
+      queryClient.setQueryData<FeedPost[]>(queryKeys.posts, (cached) =>
+        cached ? cached.filter((entry) => entry.id !== post.id) : cached,
+      );
+      queryClient.setQueryData<{ items: FeedPost[]; total: number }>(
+        queryKeys.myPosts,
+        (cached) => {
+          if (!cached) return cached;
+          const present = cached.items.some((entry) => entry.id === post.id);
+          return {
+            items: cached.items.filter((entry) => entry.id !== post.id),
+            total: present ? Math.max(0, cached.total - 1) : cached.total,
+          };
+        },
+      );
+      setMenuOpen(false);
+      setDeleteError(null);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot });
+    } catch (error) {
+      // The post stays put. The message is rendered inside the still-open
+      // confirmation dialog - persistent, never a toast.
+      setDeleteError(error instanceof Error ? error.message : 'The post could not be deleted.');
+    } finally {
+      setDeleting(false);
+    }
+
+  }, [deleting, post.id, queryClient]);
 
   const handleShare = () => {
     setShareError(null);
@@ -402,7 +455,9 @@ export function FeedPostCard({ post, baseOffset = 0, onOpenProfile, onOpenLink }
 
       <PostOverflowMenu
         visible={menuOpen}
-        isOwnPost={post.origin === 'profile'}
+        // Only the SERVER's per-reader answer may gate Delete: `origin` says
+        // where a post came from, not whose it is - every API row is 'profile'.
+        isOwnPost={post.author.isSelf}
         saved={saved}
         onToggleSave={() => {
           toggleSave(post.id);
@@ -416,8 +471,16 @@ export function FeedPostCard({ post, baseOffset = 0, onOpenProfile, onOpenLink }
           setMenuOpen(false);
           if (canOpenProfile) onOpenProfile();
         }}
-        onClose={() => setMenuOpen(false)}
+        onDelete={() => void handleDelete()}
+        deleting={deleting}
+        deleteError={deleteError}
+        onClose={() => {
+          setMenuOpen(false);
+          setDeleteError(null);
+        }}
       />
     </Card>
   );
 }
+
+export const FeedPostCard = memo(FeedPostCardInner);

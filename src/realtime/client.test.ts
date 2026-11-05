@@ -473,6 +473,103 @@ describe('applyRealtimeEvent — conversation.read', () => {
   });
 });
 
+// --- Phase 14: edit + call events --------------------------------------------
+
+function updatedEvent(overrides: Record<string, unknown> = {}) {
+  return parseRealtimeEvent(
+    envelope({
+      event_id: 'evt-upd-1',
+      event_type: 'message.updated',
+      payload: {
+        message_id: 'm-1',
+        conversation_id: 'c-1',
+        body: 'fixed it',
+        edited_at: '2026-10-02T00:00:00+00:00',
+        ...overrides,
+      },
+    }),
+  )!;
+}
+
+function callEvent(
+  type: 'call.incoming' | 'call.accepted' | 'call.ended',
+  payload: Record<string, unknown>,
+  eventId = 'evt-call-1',
+) {
+  return parseRealtimeEvent(
+    envelope({ event_id: eventId, event_type: type, payload }),
+  )!;
+}
+
+describe('applyRealtimeEvent — message.updated', () => {
+  beforeEach(() => {
+    vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined as never);
+  });
+
+  it('refreshes the thread and the list, and leaves the detail key alone', () => {
+    expect(applyRealtimeEvent(updatedEvent())).toBe(true);
+    const keys = invalidatedKeys();
+    expect(keys).toContainEqual(['conversations', 'c-1', 'messages']);
+    expect(keys).toContainEqual(['conversations']);
+    expect(keys).not.toContainEqual(['conversations', 'c-1']);
+  });
+
+  it('does nothing when the conversation id is missing', () => {
+    expect(applyRealtimeEvent(updatedEvent({ conversation_id: undefined }))).toBe(false);
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyRealtimeEvent — call.*', () => {
+  beforeEach(() => {
+    vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue(undefined as never);
+  });
+
+  const incoming = () =>
+    callEvent('call.incoming', {
+      call_id: 'call-1',
+      conversation_id: 'c-1',
+      caller_user_id: 'u-1',
+      mode: 'audio',
+    });
+
+  it('routes call.incoming to subscribers and refreshes history + list', async () => {
+    const { onIncomingCall } = await import('@/realtime/queryBridge');
+    const seen: string[] = [];
+    const off = onIncomingCall((p) => seen.push(p.callId));
+    expect(applyRealtimeEvent(incoming())).toBe(true);
+    expect(seen).toEqual(['call-1']);
+    expect(invalidatedKeys()).toContainEqual(['conversations', 'c-1', 'calls']);
+    expect(invalidatedKeys()).toContainEqual(['conversations']);
+    off();
+  });
+
+  it('drops a malformed call payload without touching the cache', () => {
+    const event = callEvent('call.incoming', {
+      call_id: 'call-1',
+      // no conversation_id, no caller — not actionable.
+      mode: 'audio',
+    });
+    expect(applyRealtimeEvent(event)).toBe(true);
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it('routes call.ended and refreshes history + list', () => {
+    expect(
+      applyRealtimeEvent(
+        callEvent('call.ended', {
+          call_id: 'call-1',
+          conversation_id: 'c-2',
+          status: 'rejected',
+          ended_by_user_id: null,
+        }),
+      ),
+    ).toBe(true);
+    expect(invalidatedKeys()).toContainEqual(['conversations', 'c-2', 'calls']);
+    expect(invalidatedKeys()).toContainEqual(['conversations']);
+  });
+});
+
 describe('applyRealtimeEvent', () => {
   it('is a deliberate no-op for every foundation event', () => {
     // Nothing in the foundation changes cached data, and asserting that here

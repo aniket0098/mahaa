@@ -6,6 +6,18 @@
  * consistent error parsing into {@link ApiError}, 401 notification, and
  * correlation-id surfacing. Feature modules call `apiClient` and never
  * re-implement transport concerns.
+ *
+ * **One class, two instances.** The Message section talks to the independent
+ * message service (`message-docker-service`) as well as the main API. That is
+ * a second *base URL*, never a second transport: {@link createApiClient} builds
+ * another instance of this same class, so auth attachment, timeout behaviour,
+ * the error envelope and the 401 listener mechanism are identical on both hosts
+ * by construction. There is still exactly one HTTP client in this app.
+ *
+ * The one deliberate difference is *session ownership*: only the instance built
+ * with `ownsSession` (the main `apiClient`) clears the shared token and notifies
+ * the auth provider on a 401. A secondary service's 401 is still thrown to its
+ * caller, but it never signs the main app out — see {@link ApiClientOptions}.
  */
 
 import { API_ERROR_CODES, ApiError, isApiErrorEnvelope } from '@/api/errors';
@@ -25,12 +37,31 @@ export interface RequestOptions {
 
 type UnauthorizedListener = () => void;
 
-class ApiClient {
+export interface ApiClientOptions {
+  /**
+   * Whether this instance owns the app's session. The main API client does; a
+   * secondary service client (the message service) does not.
+   *
+   * Only the owning client reacts to a 401 by clearing the shared token and
+   * notifying the auth provider. A secondary service presents the *same* bearer
+   * token to a *different* backend, so its 401 says nothing the main API has not
+   * already said about that token — and clearing the shared session on it would
+   * log a healthy user out of the whole app because one independent service
+   * hiccupped. A non-owning client still surfaces the 401 to its caller as a
+   * normal {@link ApiError} (`isUnauthenticated === true`), so the calling
+   * feature decides what to do; it just never touches the shared session.
+   */
+  ownsSession?: boolean;
+}
+
+export class ApiClient {
   private readonly baseUrl: string;
+  private readonly ownsSession: boolean;
   private readonly unauthorizedListeners = new Set<UnauthorizedListener>();
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, options: ApiClientOptions = {}) {
     this.baseUrl = baseUrl;
+    this.ownsSession = options.ownsSession ?? false;
   }
 
   /** Register a 401 listener (the auth provider clears session state). */
@@ -127,7 +158,12 @@ class ApiClient {
 
     if (!response.ok) {
       const apiError = await this.parseError(response);
-      if (apiError.isUnauthenticated) {
+      // Only the client that owns the session may clear it. A message-service
+      // 401 (same token, different backend) must not log the main app out: the
+      // error is still thrown below so the calling feature can act on it, but
+      // the shared token and the auth provider are left untouched. A genuine
+      // main-API 401 is unaffected — it still clears the token and notifies.
+      if (apiError.isUnauthenticated && this.ownsSession) {
         await tokenStorage.clear();
         this.unauthorizedListeners.forEach((listener) => listener());
       }
@@ -180,4 +216,21 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-export const apiClient = new ApiClient(env.apiBaseUrl);
+export const apiClient = new ApiClient(env.apiBaseUrl, { ownsSession: true });
+
+/**
+ * A second instance of the SAME client pointed at another service.
+ *
+ * Used for the message service, whose base URL is resolved separately (see
+ * `@/lib/messageApiBaseUrl`). Never build a bespoke fetch wrapper for a new
+ * host — that is how a second error format and a second auth path appear.
+ *
+ * The returned instance does **not** own the session (see
+ * {@link ApiClientOptions.ownsSession}): a 401 from it is raised to the caller
+ * but never clears the main app's shared token or notifies the auth provider.
+ * Pass `{ ownsSession: true }` only for a host that is itself the source of
+ * truth for the app's session — which, today, is only the main API.
+ */
+export function createApiClient(baseUrl: string, options: ApiClientOptions = {}): ApiClient {
+  return new ApiClient(baseUrl, options);
+}

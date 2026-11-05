@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import INVALID_CREDENTIALS_MESSAGE, ApiError, ErrorCode
-from app.models import User
+from app.models import ProfilePrivacy, User
 from app.models.enums import UserStatus
 from app.schemas.auth import SignupRequest
 from app.services.passwords import (
@@ -142,6 +142,20 @@ def create_user(session: Session, payload: SignupRequest) -> User:
         status=UserStatus.ACTIVE,
     )
     session.add(user)
+    # Flush so the application-generated ``user.id`` (a Python-side UUID default,
+    # applied at INSERT time) is populated before the privacy row references it as
+    # its primary key. Without this the privacy row would be created against a
+    # ``None`` user id.
+    session.flush()
+    # The privacy row is created **eagerly, at signup**, with the documented
+    # defaults — discoverable-by-name, messages allowed, contact details hidden
+    # (see ``models/profile.py``). It used to be created lazily on first profile
+    # read, which meant a brand-new account had *no* privacy row and therefore
+    # never appeared in a name search until the person happened to open their
+    # profile or Settings. Recording the decision at signup is what makes the
+    # opt-out default real: every account has an explicit row a person can later
+    # flip off, and none depends on a read that may never happen.
+    session.add(ProfilePrivacy(user_id=user.id))
     try:
         session.commit()
     except IntegrityError as exc:

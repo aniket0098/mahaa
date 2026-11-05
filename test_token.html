@@ -1,0 +1,13 @@
+<html><body>
+  <script>
+    // Set the auth token in sessionStorage
+    const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlMDhkNjE4ZC0zYWE4LTRiNmUtYmNiZi1hN2M0YzI4MzEzNzciLCJyb2xlIjoiY2FuZGlkYXRlIiwicHVibGljX2lkIjoiTUotTDU3WEpMQU0iLCJ0eXBlIjoiYWNjZXNzIiwian'
+    sessionStorage.setItem('mahajob.access_token', token)
+    
+    // Navigate to the learn hub
+    setTimeout(() => {
+      window.location.href = 'http://localhost:19006/learn';
+    }, 500);
+  </script>
+  <p>Token set. Check the browser.</p>
+</body></html>

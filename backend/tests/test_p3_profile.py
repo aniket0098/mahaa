@@ -307,12 +307,17 @@ PRIVACY_WRITE = {
 
 
 def test_privacy_defaults_to_private(api_client, candidate) -> None:
-    """The documented defaults: private, not discoverable, contact hidden."""
+    """The documented defaults: private profile, discoverable by name, contact hidden.
+
+    Phase 23: ``discoverable`` defaults to True (opt-out), so a registered
+    account is findable by name until its owner turns that off. The profile
+    itself stays ``private`` and contact details stay hidden.
+    """
 
     body = api_client.get("/api/v1/profile/privacy", headers=candidate.headers).json()
 
     assert body["profile_visibility"] == "private"
-    assert body["discoverable"] is False
+    assert body["discoverable"] is True
     assert body["show_email"] is False
     assert body["show_phone"] is False
     assert body["allow_messages"] is True

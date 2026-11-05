@@ -1,0 +1,19 @@
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_API_BASE_URL_LAN EXPO_PUBLIC_API_BASE_URL_WEB LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_URL
+Starting project at C:\mahaa
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Error: listen EADDRINUSE: address already in use :::8081
+Error: listen EADDRINUSE: address already in use :::8081
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2102:7)
+    at C:\mahaa\node_modules\expo\node_modules\@expo\cli\build\src\start\server\metro\runServer-fork.js:144:20
+    at new Promise (<anonymous>)
+    at runServer (C:\mahaa\node_modules\expo\node_modules\@expo\cli\build\src\start\server\metro\runServer-fork.js:140:12)
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processTimers (node:internal/timers:520:9)
+    at async replaceMetroFileMap (C:\mahaa\node_modules\expo\node_modules\@expo\cli\build\src\start\server\metro\createFileMap-fork.js:191:20)
+    at async instantiateMetroAsync (C:\mahaa\node_modules\expo\node_modules\@expo\cli\build\src\start\server\metro\instantiateMetro.js:401:51)

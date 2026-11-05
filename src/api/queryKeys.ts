@@ -65,8 +65,40 @@ export const queryKeys = {
   achievements: ['profile', 'achievements'] as const,
   /** Server-published upload limits, so the composer never hard-codes a copy. */
   mediaLimits: ['media', 'limits'] as const,
+  /** The caller's own uploaded media (GET /media/mine). */
+  myUploads: ['media', 'mine'] as const,
+  /** The caller's own saved items (GET /saved, POST /saved, DELETE /saved/{id}). */
+  saved: ['saved'] as const,
   opportunities: (filter?: Record<string, unknown>) => ['opportunities', filter ?? {}] as const,
   opportunity: (opportunityId: string) => ['opportunities', opportunityId] as const,
+
+  /** The Learning Hub catalogue. Published courses only — the server decides
+   * what is public, and an empty result is a real empty list, never sample data.
+   */
+  courses: (params?: Record<string, unknown>) => ['courses', params ?? {}] as const,
+  course: (courseId: string) => ['courses', courseId] as const,
+  /**
+   * The caller's enrolment in one course (`GET /courses/{id}/enrollment`).
+   *
+   * Nested under that course's key, so the enrolment mutation invalidates
+   * exactly the state it changed. The server is the only source of truth for
+   * "am I enrolled" — the screen keeps no local copy, and nothing else in the
+   * app caches this key (there is no My Learning surface yet).
+   */
+  courseEnrollment: (courseId: string) => ['courses', courseId, 'enrollment'] as const,
+
+  /**
+   * The caller's own enrolments (`GET /courses/enrollments/mine`).
+   *
+   * Nested under `courses` so an enrolment mutation invalidates the catalogue
+   * branch predictably. The server is the only source of truth for what the
+   * caller is enrolled in; nothing else in the app caches this key.
+   */
+  myEnrollments: ['courses', 'mine'] as const,
+
+  /** Saved items for the candidate. */
+  saved: () => ['saved'] as const,
+  savedItem: (savedItemId: string) => ['saved', savedItemId] as const,
 
   /**
    * My own account. Nested under `users` so an account change (name, handle,
@@ -109,6 +141,22 @@ export const queryKeys = {
    * own account and everybody else's view of it in one call.
    */
   avatarDependent: ['users'] as const,
+
+  /**
+   * The Message section.
+   *
+   * Two roots because there are two services: `messageRequests` is served by
+   * `message-docker-service` (accept/reject invalidates both the list and the
+   * badge together — the count is server-derived and must never be adjusted
+   * on the client), while `conversations` is served by the main API.
+   */
+  messageRequests: (status?: string) => ['messageRequests', status ?? 'pending'] as const,
+  messageRequestsRoot: ['messageRequests'] as const,
+  messageRequestCount: ['messageRequests', 'count'] as const,
+  // `conversations` is deliberately NOT redeclared here: the realtime bridge
+  // already owns that key (`messagingQueryKeys.conversations` in
+  // src/realtime/queryBridge.ts) so socket events invalidate the inbox list.
+  // A second, identical-looking key would split the cache in two.
 
   /** Requests and connections, in both directions. */
   connections: (status?: string) => ['connections', status ?? 'all'] as const,

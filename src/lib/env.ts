@@ -9,6 +9,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
 import { resolveApiBaseUrl, type PlatformName } from '@/lib/apiBaseUrl';
+import { resolveMessageServiceBase } from '@/lib/messageApiBaseUrl';
 
 function currentPlatform(): PlatformName {
   if (Platform.OS === 'android' || Platform.OS === 'ios' || Platform.OS === 'web') {
@@ -54,10 +55,32 @@ const resolved = resolveApiBaseUrl(
   platform === 'android' ? process.env.EXPO_PUBLIC_API_BASE_URL_LAN : undefined,
 );
 
+/**
+ * The message service's base URL, resolved from its own variables with a
+ * derived local-dev fallback (port 8001 beside the main API's 8000). It is
+ * resolved *after* `resolved.baseUrl` because the derivation reads the main
+ * base.
+ */
+const messageService = resolveMessageServiceBase(
+  process.env.EXPO_PUBLIC_MESSAGE_API_BASE_URL,
+  platform === 'web' ? process.env.EXPO_PUBLIC_MESSAGE_API_BASE_URL_WEB : undefined,
+  platform === 'android' ? process.env.EXPO_PUBLIC_MESSAGE_API_BASE_URL_LAN : undefined,
+  resolved.baseUrl,
+  platform,
+);
+
 export const env = {
   apiBaseUrl: resolved.baseUrl,
   apiBaseUrlSource: resolved.source,
   apiHostKind: resolved.hostKind,
+  /**
+   * The independent message service (`message-docker-service`). `null` means
+   * genuinely unconfigured — a deployed main API with no message-service URL
+   * set — and the Message section renders a configuration notice rather than
+   * a doomed request. See `@/lib/messageApiBaseUrl`.
+   */
+  messageServiceBaseUrl: messageService.baseUrl,
+  messageServiceBaseUrlSource: messageService.source,
   isPhysicalDevice: isPhysicalDevice(),
   /**
    * The app is on a phone but is using a host that cannot exist there, so every

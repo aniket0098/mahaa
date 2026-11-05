@@ -40,7 +40,15 @@ export default function CandidateLayout() {
   return (
     <SidebarProvider>
       <Tabs
-        tabBar={(props) => <CandidateTabBar {...props} />}
+        tabBar={(props) => {
+          // The Learning Hub owns its own bottom bar under `/learn`. Rendering
+          // the candidate bar here too would stack two bars on screen, so it
+          // steps aside while any hub section is focused. Android Back still
+          // walks the hub sections first (backBehavior="history"), then leaves
+          // the hub for whichever candidate tab opened it.
+          if (props.state.routes[props.state.index]?.name === 'learn') return null;
+          return <CandidateTabBar {...props} />;
+        }}
         /*
          * Detail routes (skills, settings, notifications, …) are hidden tabs, not
          * stack pushes, so the tab navigator decides where Back lands. The default
@@ -50,6 +58,16 @@ export default function CandidateLayout() {
         backBehavior="history"
         screenOptions={{
           headerShown: false,
+          /*
+           * The bar is `position: 'absolute'`, so on Android 15+ (edge-to-edge)
+           * it sits *behind* the open keyboard rather than above it. Hiding it
+           * while the keyboard is up is what keeps the conversation composer's
+           * keyboard-mode padding honest: the row keeps only its own spacing
+           * because nothing else occupies the bottom of the window then. The
+           * same keyboard events drive the hide as drive the composer's lift,
+           * so the bar and the row can never disagree.
+           */
+          tabBarHideOnKeyboard: true,
           tabBarActiveTintColor: colors.colorPrimary,
           tabBarInactiveTintColor: colors.colorTextTertiary,
           tabBarStyle: [styles.tabBar, { height: layout.bottomNavHeight + insets.bottom }],

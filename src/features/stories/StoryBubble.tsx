@@ -18,7 +18,7 @@
  * does not shift the rest of the row.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 
 import { AppIcon } from '@/components/ui/AppIcon';
@@ -26,6 +26,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { colors } from '@/theme/tokens';
 import { DEMO_STORY_BADGE, isDemoStory } from './demoStories';
 import { storyGroupRing, type StoryGroup } from './storyGroups';
+import { setStoryOrigin } from './storyOrigin';
 import { storyStyles } from './storyStyles';
 
 export interface StoryBubbleProps {
@@ -55,6 +56,23 @@ export function StoryBubble({ group, onPress }: StoryBubbleProps) {
     [scale],
   );
 
+  // Where the viewer flies back to when it closes: measured at press time,
+  // in window coordinates. The press still fires if measuring is impossible.
+  const bubbleRef = useRef<View>(null);
+  const handlePress = useCallback(() => {
+    const node = bubbleRef.current;
+    if (!node) {
+      onPress();
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        setStoryOrigin({ x, y, width, height });
+      }
+      onPress();
+    });
+  }, [onPress]);
+
   const ringStyle =
     ring === 'premium'
       ? isViewed
@@ -70,7 +88,8 @@ export function StoryBubble({ group, onPress }: StoryBubbleProps) {
   return (
     <Pressable
       style={storyStyles.bubbleContainer}
-      onPress={onPress}
+      ref={bubbleRef}
+      onPress={handlePress}
       onPressIn={() => animate(0.93)}
       onPressOut={() => animate(1)}
       accessibilityRole="button"

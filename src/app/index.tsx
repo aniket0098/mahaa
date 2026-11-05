@@ -20,6 +20,7 @@ import { AppText } from '@/components/ui/AppText';
 import { BrandMark } from '@/components/ui/BrandMark';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { StatusBanner } from '@/components/ui/StatusBanner';
 import { useAuth } from '@/auth/AuthContext';
 import { resolveEntryPath } from '@/auth/entryPath';
 import { HIGHLIGHTS, LATER_STAGES, LIVE_SURFACES, PILLARS } from '@/features/landing/content';
@@ -30,9 +31,14 @@ export default function LandingScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
-  const { status, principal } = useAuth();
+  const { status, principal, sessionError, retrySession } = useAuth();
 
   const isAuthenticated = status === 'authenticated';
+  // A transient session-resolve failure (network/timeout/5xx) keeps the stored
+  // token and holds `loading`; the landing page is the cold-start surface, so it
+  // is where a returning user learns their session is only *temporarily*
+  // unverified and can retry — rather than being told to create an account.
+  const showSessionRetry = status === 'loading' && sessionError !== null;
   const primaryLabel = isAuthenticated ? 'Open your dashboard' : 'Create your account';
   // A signed-in visitor returns to their own entry point, so the landing page never
   // becomes a way into the other role's navigation. It goes through the same
@@ -54,6 +60,15 @@ export default function LandingScreen() {
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
         showsVerticalScrollIndicator={false}>
+        {showSessionRetry ? (
+          <View style={styles.sessionRetry}>
+            <StatusBanner
+              title="We couldn't verify your session"
+              description={sessionError}
+              onRetry={retrySession}
+            />
+          </View>
+        ) : null}
         {/* Hero — navy public surface */}
         <View style={[styles.hero, { paddingTop: insets.top + spacing.xl }]}>
           <BrandMark tone="inverse" size="lg" />

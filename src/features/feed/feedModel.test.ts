@@ -165,6 +165,7 @@ function makePost(overrides: Partial<FeedPost> = {}): FeedPost {
       headline: null,
       avatarUrl: null,
       profileHref: '/profile',
+      isSelf: true,
       verified: false,
     },
     ...overrides,
@@ -191,6 +192,7 @@ describe('fromProfileRecords', () => {
       headline: 'Software Engineering Intern',
       avatarUrl: null,
       profileHref: '/profile',
+      isSelf: true,
       verified: false,
     });
   });

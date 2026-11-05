@@ -301,6 +301,8 @@ function mapAuthor(wire: WireAuthor): FeedAuthor {
     // A comment the reader wrote opens their own profile, exactly as a post of
     // their own does. The server decides which those are via `is_self`.
     profileHref: wire.is_self ? '/profile' : null,
+    // The server's own per-reader answer — the basis for Delete.
+    isSelf: wire.is_self,
     verified: wire.verified,
   };
 }

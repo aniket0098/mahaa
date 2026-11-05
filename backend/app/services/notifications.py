@@ -229,6 +229,12 @@ def _scoped(viewer: User, unread_only: bool) -> Select:
     conditions = [Notification.user_id == viewer.id]
     if unread_only:
         conditions.append(Notification.is_read.is_(False))
+    # Chat messages are not app notifications (§13): a message belongs to its
+    # conversation, whose Messages-section row carries the server's
+    # `unread_count`. They must never appear in this list, inflate the badge,
+    # or be touched by read-all — chat read state moves through the
+    # conversation read pointer (`POST /conversations/{id}/read`) instead.
+    conditions.append(Notification.type != NotificationType.MESSAGE)
     return select(Notification).where(*conditions)
 
 def list_for(
@@ -318,6 +324,7 @@ def unread_count(session: Session, viewer: User) -> UnreadCount:
         .where(
             Notification.user_id == viewer.id,
             Notification.is_read.is_(False),
+            Notification.type != NotificationType.MESSAGE,
         )
     )
     return UnreadCount(count=count or 0)
@@ -371,6 +378,7 @@ def mark_all_read(session: Session, viewer: User) -> None:
         .where(
             Notification.user_id == viewer.id,
             Notification.is_read.is_(False),
+            Notification.type != NotificationType.MESSAGE,
         )
         .values(is_read=True)
     )

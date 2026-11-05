@@ -237,10 +237,17 @@ def test_a_second_profile_for_one_user_is_impossible(
     assert_rejected(db_session, Profile(user_id=user.id, headline="Second"))
 
 
-def test_profile_privacy_defaults_to_private_and_not_discoverable(
+def test_profile_privacy_defaults_to_private_and_discoverable(
     db_session: Session, user_factory
 ) -> None:
-    """A new account is private by default, and every flag is non-null.
+    """A new account is private-by-profile but discoverable-by-name; every flag
+    is non-null.
+
+    ``discoverable`` is True by default (Phase 23): the professional-network
+    contract is opt-out, so a registered person is findable by name until they
+    turn that off in Settings. ``profile_visibility`` stays ``private`` and the
+    contact flags stay hidden, so discoverability-by-name is independent of how
+    much of the profile is shown.
 
     A nullable privacy flag is NULL on the first read and every service then has
     to guess what "unknown" means â€” which is how a private profile leaks.
@@ -253,7 +260,7 @@ def test_profile_privacy_defaults_to_private_and_not_discoverable(
     stored = db_session.get(ProfilePrivacy, user.id)
     assert stored is not None
     assert stored.profile_visibility == ProfileVisibility.PRIVATE
-    assert stored.discoverable is False
+    assert stored.discoverable is True
     assert stored.allow_messages is True
     assert stored.show_email is False
     assert stored.show_phone is False

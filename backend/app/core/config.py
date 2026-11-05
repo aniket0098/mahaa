@@ -146,6 +146,35 @@ class Settings(BaseSettings):
             origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
         ]
 
+    # --- LiveKit calling (Phase 3/4) ----------------------------------------
+    #: Server-side only. These three are read here and **never** cross an API
+    #: boundary: the mobile app receives a short-lived *participant* token minted
+    #: from them, never the key or the secret. An empty value is the honest
+    #: representation of "calling not configured", and the call-token endpoint
+    #: answers a clear 503 rather than falling back to a fake token.
+    livekit_url: str = ""
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+    #: How long a participant token is valid. Short on purpose: it is only needed
+    #: for the join handshake, and a long-lived token that leaks is a standing
+    #: invitation to the room.
+    livekit_token_ttl_seconds: int = Field(default=600, ge=60, le=3600)
+    #: How long a call rings before the reaper marks it EXPIRED (a missed call).
+    call_ring_timeout_seconds: int = Field(default=45, ge=15, le=300)
+
+    @property
+    def livekit_configured(self) -> bool:
+        """True only when all three LiveKit settings are present.
+
+        The token endpoint checks this before doing anything else, so a
+        deployment that has not set up calling gets a single clear refusal
+        instead of an opaque SDK error from deep inside token signing.
+        """
+
+        return bool(
+            self.livekit_url and self.livekit_api_key and self.livekit_api_secret
+        )
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

@@ -1,0 +1,6 @@
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_API_BASE_URL_LAN EXPO_PUBLIC_API_BASE_URL_WEB LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_URL
+Starting project at C:\mahaa
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Terminate batch job (Y/N)? 

@@ -32,7 +32,7 @@ import { AppText } from '@/components/ui/AppText';
 import { BackButton } from '@/components/ui/BackButton';
 import { StoryViewer } from '@/features/stories/StoryViewer';
 import { isDemoStory, isDemoStoryId, markDemoStoryViewed } from '@/features/stories/demoStories';
-import { groupStoriesByAuthor, positionForStoryId } from '@/features/stories/storyGroups';
+import { groupStoriesByAuthor, positionForAuthor, positionForStoryId } from '@/features/stories/storyGroups';
 import { useStoryList } from '@/features/stories/useStoryList';
 import { colors } from '@/theme/tokens';
 
@@ -98,7 +98,17 @@ export default function StoryScreen() {
 
   // The tapped id → its group + the first unviewed story in that group, so a
   // partially-watched person resumes where they stopped.
-  const position = useMemo(() => (id ? positionForStoryId(groups, id) : null), [groups, id]);
+  // The tapped id is an AUTHOR identity first (the row opens by
+  // `authorPublicId`), a story id second (older links, extra taps).
+  // Either way the viewer starts at that person's first unviewed story.
+  // Author-first matters: the group is resolved from LATEST data on every
+  // render, so a story id baked into navigation cannot land on the wrong
+  // person after a refetch.
+  const position = useMemo(
+    () => (id ? (positionForAuthor(groups, id) ?? positionForStoryId(groups, id)) : null),
+    [groups, id],
+  );
+
 
   // A demo story is local, so waiting on the stories request would only delay
   // content that is already in hand.
@@ -123,6 +133,11 @@ export default function StoryScreen() {
 
   return (
     <StoryViewer
+      // Keyed on the tapped identity: opening another person's circle
+      // remounts the whole viewer — fresh position, fresh player, zero
+      // shared glance state — instead of recycling the previous person's
+      // index, story id, viewed-set, or playback callbacks.
+      key={id}
       groups={groups}
       initialPosition={position}
       onClose={handleClose}

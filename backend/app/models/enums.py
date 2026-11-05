@@ -441,3 +441,104 @@ class RequirementKind(StrEnum):
 
     REQUIRED = "required"
     PREFERRED = "preferred"
+
+
+class CallMode(StrEnum):
+    """``calls.mode`` — what a call may carry, decided by the caller at start.
+
+    Kept to the two a 1:1 career conversation actually needs. ``VIDEO`` implies
+    audio (WebRTC video tracks carry their own audio path in LiveKit), so there
+    is no separate "both" value to reason about.
+    """
+
+    AUDIO = "audio"
+    VIDEO = "video"
+
+
+class CallStatus(StrEnum):
+    """``calls.status`` — the call lifecycle, as a state machine the DB enforces.
+
+    Transitions are one-way and validated in the service, never in the client:
+
+    ``RINGING → ACCEPTED → ENDED``  the happy path.
+    ``RINGING → REJECTED``          recipient declines before answering.
+    ``RINGING → CANCELLED``         caller gives up before answer.
+    ``ACCEPTED → ENDED``            hang-up from either side.
+
+    ``EXPIRED`` is written by the reaper when nobody answered inside the window,
+    so a missed call is a durable row rather than a ringing invitation that
+    vanished. A terminal state is never left: every call reaches exactly one of
+    ENDED, REJECTED, CANCELLED or EXPIRED.
+    """
+
+    RINGING = "ringing"
+    ACCEPTED = "accepted"
+    ENDED = "ended"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class CourseStatus(StrEnum):
+    """``courses.status`` — the Learning Hub's publication state.
+
+    Mirrors ``OpportunityStatus``'s reasoning: a course the platform can show
+    needs a non-shown state to exclude, and the list query filters on it **in
+    SQL** so a draft can never leak through a missed Python-side check.
+    ``archived`` is deliberately absent until there is a real archive action.
+    """
+
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
+class CourseVisibility(StrEnum):
+    """``courses.visibility`` — same two values as ``OpportunityVisibility``.
+
+    ``unlisted`` is the honest second value: reachable by direct id, absent from
+    the catalogue, so the column is a real discriminator rather than a constant.
+    """
+
+    PUBLIC = "public"
+    UNLISTED = "unlisted"
+
+
+class LectureKind(StrEnum):
+    """``course_lectures.kind`` — what a lecture can carry, decided at write time.
+
+    The three kinds are exactly what the existing infrastructure can honestly
+    serve today: ``hosted_video`` is a `media_assets` video row (the 10 MB
+    database-backed pipeline), ``external_video`` is a validated ``https://``
+    URL to a third-party host (no upload, no storage), and ``reading`` is
+    either an uploaded PDF media row or a linked reading. A kind whose source
+    cannot be represented would render as an empty player forever, so the set
+    is closed.
+    """
+
+    HOSTED_VIDEO = "hosted_video"
+    EXTERNAL_VIDEO = "external_video"
+    READING = "reading"
+
+
+class LectureStatus(StrEnum):
+    """``course_lectures.status`` — a lecture inside a published course can still
+    be an unpublished draft, which is why this is a column and not a
+    consequence of the parent's status."""
+
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
+class EnrollmentStatus(StrEnum):
+    """``enrollments.status`` — the enrollment lifecycle, stored not derived.
+
+    The vocabulary exists so the table can record states the free-first flow
+    will produce later (``completed`` once progress says so, ``cancelled`` on
+    unenroll) without a migration. Stage 2 only ever writes ``active``: the
+    enrollment API itself arrives with the Learn UI stage, and a paid course
+    must never be enrolled without a server-verified payment.
+    """
+
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"

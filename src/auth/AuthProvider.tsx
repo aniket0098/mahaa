@@ -8,7 +8,12 @@
  * - on mount: with a stored token, the session resolves via `/auth/me` and the
  *   app stays in `loading` until the server answers;
  * - without a token the state settles as `unauthenticated` immediately;
- * - any 401 from any request clears the token and demotes the session.
+ * - a *genuine* auth failure — a 401 (invalid/expired token) or a 403
+ *   (suspended account) from `/auth/me` — clears the token and demotes the
+ *   session; a *transient* failure (network error, timeout, 5xx) preserves the
+ *   token, holds `loading`, and exposes a retry (`sessionError` +
+ *   `retrySession`), so a momentary blip never logs a valid user out. The
+ *   decision itself lives in the pure `@/auth/sessionState` module.
  *
  * **The realtime socket is part of this provider's job**, opened on
  * `authenticated` and closed on `unauthenticated`/`logout`. It is here rather
@@ -25,10 +30,10 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { fetchPrincipal, login as loginRequest, signup as signupRequest } from '@/api/auth';
 import { apiClient } from '@/api/client';
-import { ApiError } from '@/api/errors';
 import { clearMediaAuth, primeMediaAuth } from '@/api/media';
 import { resetPlayback } from '@/features/feed/feedPlayback';
 import { AuthContext, type AuthContextValue } from '@/auth/AuthContext';
+import { transitionOnResolution } from '@/auth/sessionState';
 import { tokenStorage } from '@/auth/tokenStorage';
 import { pushDeviceStore } from '@/notifications/deviceStore';
 import { unregisterForPush } from '@/notifications/push';
@@ -53,43 +58,89 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [principal, setPrincipal] = useState<Principal | null>(null);
+  /**
+   * A retryable message for a *transient* session-resolve failure (network,
+   * timeout, 5xx). `null` otherwise. Exposed so a screen can offer a retry
+   * instead of leaving a valid user on an endless spinner — see `retrySession`.
+   */
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  /**
+   * Monotonic id for each resolution attempt (startup plus every retry). A
+   * result is applied only while its attempt is still the latest, which closes
+   * two races at once: a slow earlier attempt can never overwrite a newer one,
+   * and a mid-flight 401 that demotes the session cannot be undone by a resolve
+   * that was already in flight when it fired.
+   */
+  const resolveAttempt = useRef(0);
 
   useEffect(() => {
     const unsubscribe = apiClient.onUnauthorized(() => {
+      // A genuine main-API 401 during an active session (expired/revoked token).
+      // The client has already cleared the shared token; here we demote the
+      // session and supersede any in-flight resolve so its late success cannot
+      // resurrect a session this 401 just invalidated. (A message-service 401
+      // never reaches this listener — that client does not own the session.)
+      resolveAttempt.current += 1;
       setPrincipal(null);
+      setSessionError(null);
       setStatus('unauthenticated');
     });
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const resolveSession = useCallback(async () => {
+    const attempt = (resolveAttempt.current += 1);
 
-    async function resolveSession() {
-      const stored = await tokenStorage.get();
-      if (!stored) {
-        if (!cancelled) setStatus('unauthenticated');
-        return;
-      }
-      try {
-        const me = await fetchPrincipal();
-        if (!cancelled) {
-          setPrincipal(me);
-          setStatus('authenticated');
-        }
-      } catch (error) {
-        if (cancelled) return;
-        await tokenStorage.clear();
-        setPrincipal(null);
-        setStatus(error instanceof ApiError && error.isForbidden ? 'forbidden' : 'unauthenticated');
-      }
+    const stored = await tokenStorage.get();
+    if (attempt !== resolveAttempt.current) return;
+    if (!stored) {
+      setPrincipal(null);
+      setSessionError(null);
+      setStatus('unauthenticated');
+      return;
     }
 
-    void resolveSession();
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const me = await fetchPrincipal();
+      if (attempt !== resolveAttempt.current) return;
+      const transition = transitionOnResolution({ ok: true, principal: me });
+      setPrincipal(transition.principal);
+      setSessionError(transition.sessionError);
+      setStatus(transition.status);
+    } catch (error) {
+      if (attempt !== resolveAttempt.current) return;
+      // Only a genuine invalid/expired session clears the token. A network
+      // error, timeout or 5xx keeps it, holds `loading`, and surfaces a retry —
+      // so a momentary connectivity blip never logs a valid user out.
+      const transition = transitionOnResolution({ ok: false, error });
+      if (transition.clearToken) {
+        await tokenStorage.clear();
+      }
+      if (attempt !== resolveAttempt.current) return;
+      setPrincipal(transition.principal);
+      setSessionError(transition.sessionError);
+      setStatus(transition.status);
+    }
   }, []);
+
+  useEffect(() => {
+    // `resolveSession` awaits storage before its first setState, so no state is
+    // written synchronously here — but the rule cannot see through the async
+    // function. Suppressed locally rather than restructuring the Phase 20
+    // transient-failure/retry behaviour this effect drives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void resolveSession();
+  }, [resolveSession]);
+
+  /**
+   * Re-run session validation after a transient failure. Offered on the context
+   * so the cold-start screen can present it once connectivity returns; calling
+   * it simply starts a fresh resolution attempt.
+   */
+  const retrySession = useCallback(() => {
+    setSessionError(null);
+    void resolveSession();
+  }, [resolveSession]);
 
   /**
    * The realtime session, tied to the one this provider already owns.
@@ -206,13 +257,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // a reconnect cannot resurrect it.
     stopRealtime();
     queryClient.clear();
+    // Supersede any in-flight resolve so a late success cannot resurrect the
+    // session this logout just ended.
+    resolveAttempt.current += 1;
     setPrincipal(null);
+    setSessionError(null);
     setStatus('unauthenticated');
   }, [queryClient, stopRealtime]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, principal, login, signup, logout }),
-    [status, principal, login, signup, logout],
+    () => ({ status, principal, sessionError, retrySession, login, signup, logout }),
+    [status, principal, sessionError, retrySession, login, signup, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

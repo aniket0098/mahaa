@@ -50,22 +50,24 @@ from app.models import (
     Connection,
     Conversation,
     ConversationMember,
+    MediaAsset,
     Message,
     ProfilePrivacy,
     User,
 )
-from app.models.enums import ConnectionStatus, NotificationType
-from app.realtime import messaging_events, notification_events
+from app.models.enums import ConnectionStatus, MediaKind
+from app.realtime import messaging_events
+from app.schemas.media import MediaRead
 from app.schemas.messaging import (
     ConversationPage,
     ConversationRead,
+    MessageAttachment,
     MessageCreate,
     MessagePage,
     MessageRead,
     MessageUpdate,
 )
 from app.schemas.users import UserSummary
-from app.services import notifications, push
 from app.services.media import avatar_url_for
 from app.services.ownership import parse_id
 
@@ -80,11 +82,11 @@ MESSAGE_PAGE_DEFAULT = 50
 CONVERSATION_PAGE_MAX = 100
 CONVERSATION_PAGE_DEFAULT = 50
 
-#: Server-rendered wording for the `message` notification (§13.2). Fixed
-#: and generic on purpose: the notification says *that* somebody wrote,
-#: and the client opens the conversation. A notification that quoted the
-#: message would leak its content into a list that renders while locked.
-_MESSAGE_TITLE = "New message"
+# Chat messages deliberately produce no notification: a message belongs to the
+# conversation it was sent in, whose single Messages-section row carries the
+# sender's identity, the latest preview and the server's `unread_count`. It is
+# not an event in the Notifications inbox, which is reserved for connection
+# requests and other account events (§13).
 # --- errors ------------------------------------------------------------------
 #
 # One message per outcome. Anything a caller could not already know stays out of
@@ -233,21 +235,61 @@ def _summary(user: User, session: Session) -> UserSummary:
     )
 
 
-def message_read(message: Message, session: Session) -> MessageRead:
-    """One message, with its body replaced by a tombstone if it was soft-deleted."""
+def _attachment_read(asset: MediaAsset) -> MessageAttachment:
+    """A media asset as a message attachment — the metadata, never the bytes.
+
+    ``served_at`` is the row's own relative path (§14.11); the client fetches the
+    bytes through the same authenticated ``GET /media/{id}`` a post image uses, so a
+    message attachment never needs a second, public URL and never bypasses the
+    per-conversation read check in ``media.serve``.
+    """
+
+    return MessageAttachment(
+        id=str(asset.id),
+        kind=asset.kind.value if isinstance(asset.kind, MediaKind) else str(asset.kind),
+        mime_type=asset.mime_type,
+        width=asset.width,
+        height=asset.height,
+        size_bytes=asset.size_bytes,
+        served_at=asset.served_at,
+    )
+
+
+def message_read(
+    message: Message, session: Session, media: MediaAsset | None = None
+) -> MessageRead:
+    """One message, with its body replaced by a tombstone if it was soft-deleted.
+
+    ``media`` is an optional pre-loaded attachment for the batch paths
+    (:func:`list_messages`, :func:`conversation_reads`) that resolve a page's assets
+    in one query and hand each row its own — so a thread of photos is not an N+1.
+    When it is omitted the row's own ``media_id`` is loaded on demand, which is the
+    single-message path (:func:`send`, :func:`edit`) where there is only ever one.
+    """
 
     deleted = message.deleted_at is not None
+    attachment: MessageAttachment | None = None
+    if not deleted and message.media_id is not None:
+        asset = media if media is not None else session.get(MediaAsset, message.media_id)
+        if asset is not None:
+            attachment = _attachment_read(asset)
     return MessageRead(
         id=str(message.id),
         conversation_id=str(message.conversation_id),
         sender=_summary(message.sender, session),
         # The column is NOT NULL and stays that way on disk; nulling it here is
         # what turns a deleted row into a tombstone instead of exposing its text.
-        body=None if deleted else message.body,
+        # A media-only message stores "" on disk (the column keeps its NOT NULL
+        # constraint) and reads back as null, so a bare image is never an
+        # empty-looking bubble.
+        body=None if deleted else (message.body or None),
         client_message_id=message.client_message_id,
         created_at=message.created_at.isoformat(),
         edited_at=message.edited_at.isoformat() if message.edited_at else None,
         deleted_at=message.deleted_at.isoformat() if message.deleted_at else None,
+        # A tombstone reveals neither its text nor its attachment, so a deleted
+        # photo message reads back as "This message was deleted" with nothing else.
+        media=attachment,
     )
 # --- reading conversations ---------------------------------------------------
 
@@ -312,14 +354,34 @@ def _sorted_members(conversation: Conversation) -> list[ConversationMember]:
     return sorted(conversation.members, key=lambda m: (m.joined_at, str(m.user_id)))
 
 
+def _media_by_id(
+    session: Session, messages: list[Message]
+) -> dict[uuid.UUID, MediaAsset]:
+    """The attachment of every message that carries one, in **one** query.
+
+    The batch counterpart to the on-demand load in :func:`message_read`: a thread or a
+    page of conversations can reference many attachments, and a lookup per message
+    would be an N+1 across the whole page. Only the distinct ``media_id``s that
+    actually appear are selected.
+    """
+
+    ids = {m.media_id for m in messages if m.media_id is not None}
+    if not ids:
+        return {}
+    return {
+        asset.id: asset
+        for asset in session.scalars(select(MediaAsset).where(MediaAsset.id.in_(ids)))
+    }
+
+
 def conversation_reads(
     session: Session, conversations: list[Conversation], viewer: User
 ) -> list[ConversationRead]:
     """Build a whole page of conversation read models without an N+1.
 
-    Three queries for the page regardless of its size: the conversations and their
-    members (already eager-loaded by the caller), the last message of each, and the
-    unread counts.
+    Four queries for the page regardless of its size: the conversations and their
+    members (already eager-loaded by the caller), the last message of each, the
+    attachments those last messages carry, and the unread counts.
     """
 
     if not conversations:
@@ -339,6 +401,7 @@ def conversation_reads(
             )
         }
 
+    media_by_id = _media_by_id(session, list(last_messages.values()))
     counts = _unread_counts(session, [c.id for c in conversations], viewer)
 
     results: list[ConversationRead] = []
@@ -357,7 +420,13 @@ def conversation_reads(
                     if conversation.last_message_at
                     else None
                 ),
-                last_message=message_read(last, session) if last is not None else None,
+                last_message=(
+                    message_read(
+                        last, session, media_by_id.get(last.media_id) if last else None
+                    )
+                    if last is not None
+                    else None
+                ),
                 members=[
                     _summary(m.user, session) for m in _sorted_members(conversation)
                 ],
@@ -646,8 +715,12 @@ def list_messages(
         has_more = len(rows) > limit
         items = rows[:limit]
         newest = items[-1] if items and has_more else None
+        media_by_id = _media_by_id(session, items)
         return MessagePage(
-            items=[message_read(message, session) for message in items],
+            items=[
+                message_read(message, session, media_by_id.get(message.media_id))
+                for message in items
+            ],
             next_cursor=(
                 encode_cursor(newest.created_at, newest.id) if newest else None
             ),
@@ -677,8 +750,12 @@ def list_messages(
     has_more = len(newest_first) > limit
     page = list(reversed(newest_first[:limit]))  # <- oldest → newest within the page
     oldest = page[0] if page and has_more else None
+    media_by_id = _media_by_id(session, page)
     return MessagePage(
-        items=[message_read(message, session) for message in page],
+        items=[
+            message_read(message, session, media_by_id.get(message.media_id))
+            for message in page
+        ],
         next_cursor=(
             encode_cursor(oldest.created_at, oldest.id) if oldest else None
         ),
@@ -695,6 +772,58 @@ def _cannot_send() -> ApiError:
         code=ErrorCode.CONFLICT,
         message="That message could not be sent. Please try again.",
     )
+
+
+def _attachment_not_allowed() -> ApiError:
+    """422 when a message names an attachment that may not be used.
+
+    Three distinct refusals collapse into one code, on purpose: an id that is not
+    the caller's asset, one that does not exist, and one that is a ``document``
+    rather than a photo or video. A per-case code or message would let a caller
+    probe which media ids exist (§16), so the shape is the same as any other
+    validation failure and says nothing about *why*.
+    """
+
+    return ApiError(
+        status_code=422,
+        code=ErrorCode.VALIDATION_ERROR,
+        message="Some of the details provided were not valid.",
+        details=[
+            error_detail(
+                "media_id",
+                "Attach one of your own photos or videos.",
+                "value_error",
+            )
+        ],
+    )
+
+
+def _resolve_attachment(
+    session: Session, viewer: User, media_id: uuid.UUID | None
+) -> uuid.UUID | None:
+    """Validate a requested attachment and return the id to store, or ``None``.
+
+    The asset must belong to the caller and be an image or a video. Ownership is
+    checked first (a message may only carry *its sender's* upload — the same rule
+    ``media.find_owned`` enforces for a photo), then kind (a private document is
+    never a message attachment, §11.5). Both collapse to :func:`_attachment_not_allowed`
+    so the two cases are indistinguishable to a caller.
+    """
+
+    if media_id is None:
+        return None
+    asset = session.scalar(
+        select(MediaAsset).where(
+            MediaAsset.id == media_id,
+            MediaAsset.owner_id == viewer.id,
+        )
+    )
+    if asset is None:
+        raise _attachment_not_allowed()
+    kind = asset.kind.value if isinstance(asset.kind, MediaKind) else str(asset.kind)
+    if kind not in (MediaKind.IMAGE.value, MediaKind.VIDEO.value):
+        raise _attachment_not_allowed()
+    return media_id
 
 
 def send(
@@ -714,6 +843,11 @@ def send(
     """
 
     conversation, _ = _find_member(session, viewer, raw_id)
+
+    # The attachment is validated before anything is stored: it must be the caller's
+    # own photo or video. Done here rather than in the schema because ownership and
+    # kind are facts about a row the schema layer cannot see.
+    media_id = _resolve_attachment(session, viewer, payload.media_id)
 
     # The recipient is the **other** member. `_find_member` has already proved the
     # viewer is one, and V1 is 1:1, so the counterpart is the single membership
@@ -745,7 +879,11 @@ def send(
     message = Message(
         conversation_id=conversation.id,
         sender_id=viewer.id,
-        body=payload.body,
+        # A photo with no caption has a NULL body on the wire, and the column is
+        # NOT NULL — so it stores the empty string. The read model turns "" back
+        # into "no text" for the client, and a tombstone still nulls it.
+        body=payload.body or "",
+        media_id=media_id,
         client_message_id=payload.client_message_id,
     )
     session.add(message)
@@ -769,31 +907,11 @@ def send(
         conversation.last_message_id = message.id
 
     session.add(conversation)
-    # §13.1's `message` type. Staged **before** this commit so the notification
-    # and the message it describes are written by one transaction: a message
-    # cannot exist without its notification, and the IntegrityError arm above
-    # (which returns `False` and never reaches here) cannot leave one behind.
-    notification = notifications.emit(
-        session,
-        recipient_id=recipient,
-        notification_type=NotificationType.MESSAGE,
-        actor_id=viewer.id,
-        target_type="conversation",
-        target_id=conversation.id,
-        title=_MESSAGE_TITLE,
-        # §13.2: identifiers for the deep link, never the message text. Putting
-        # the body here would copy every private message into a second table.
-        data={"conversation_id": str(conversation.id)},
-    )
+    # Commit the message and the conversation pointer together: no notification
+    # row is created for a chat message (see the note near _MESSAGE_TITLE's old
+    # home — chat lives in the Messages section, not the Notifications inbox).
     session.commit()
     session.refresh(message)
-
-    # Phase 3 realtime: after the commit, so a rollback leaves no event. A message
-    # legitimately produces TWO events — `message.created` for the thread and
-    # `notification.created` for the badge — and they are not interchangeable: the
-    # first carries the body, the second carries only the notification's own
-    # fields. Publishing only one would leave the recipient's badge stale.
-    notification_events.publish_for(notification)
 
     # Phase 2 realtime: ONLY now, after the commit returned. A rollback at any
     # point above would leave the recipient holding an event for a message that
@@ -812,14 +930,6 @@ def send(
         client_message_id=message.client_message_id,
     )
 
-    # Phase 4 push: last, and strictly after the commit above. Two reasons for the
-    # position, not just the ordering: a rollback leaves no push, so a message that
-    # does not exist can never appear on a lock screen; and it runs *after* both
-    # socket publishes because that call is synchronous network I/O to a third
-    # party, and the foreground path must not wait on it. A recipient with the app
-    # open is served by the socket; push is the background fallback and has no
-    # business being in front of it.
-    push.dispatch(session, notification)
     return message_read(message, session), True
 
 

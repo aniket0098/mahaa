@@ -157,6 +157,23 @@ def media_limits(current_user: CurrentUser) -> MediaLimits:
     return svc.limits()
 
 
+@router.get(
+    "/media/mine",
+    response_model=list[MediaRead],
+    summary="List my uploads",
+)
+def list_my_media(
+    current_user: CurrentUser,
+    session: DbSession,
+    limit: int = 50,
+) -> list[MediaRead]:
+    """The caller's own uploaded assets, newest first.
+
+    Backs the Learning Hub Upload library. Metadata only — no bytes, no data.
+    """
+    return svc.list_owned(session, current_user, limit=limit)
+
+
 @router.post(
     "/media",
     response_model=MediaRead,

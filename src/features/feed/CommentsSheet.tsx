@@ -18,7 +18,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   TextInput,
@@ -70,7 +69,9 @@ export function CommentsSheet({ post, visible, onClose }: CommentsSheetProps) {
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      // Android Back must take the same path as the close buttons: clearing the
+      // abandoned draft so the next open starts fresh and no stale offset lingers.
+      onRequestClose={handleClose}
       statusBarTranslucent
       testID="feed-comments-sheet">
       <Pressable
@@ -101,10 +102,17 @@ export function CommentsSheet({ post, visible, onClose }: CommentsSheetProps) {
           </View>
 
           {/* The keyboard must not cover the composer, so the sheet moves out of its
-              way. `undefined` on Android is deliberate: the platform already resizes
-              the window, and asking for both double-pads the list. */}
+              way. A `Modal` renders in a separate native window whose
+              `windowSoftInputMode="adjustResize"` does not reach it, so on
+              Android the sheet needs its own lift: `behavior="padding"` moves
+              the list AND the composer (both live inside this one wrapper) above
+              the keyboard together, restores them on dismiss, and leaves no
+              stale offset behind. `keyboardVerticalOffset` stays 0 — the card
+              already carries `insets.bottom`, so any extra offset would linger
+              as a gap after the keyboard closes. */}
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior="padding"
+            keyboardVerticalOffset={0}
             style={styles.sheetKeyboard}>
             <ScrollView
               contentContainerStyle={styles.sheetBody}
@@ -166,6 +174,11 @@ export function CommentsSheet({ post, visible, onClose }: CommentsSheetProps) {
                   placeholder="Write a comment…"
                   placeholderTextColor={colors.colorTextDisabled}
                   multiline
+                  // Multiline wraps and grows to a cap, then scrolls inside —
+                  // matching the message composer. `scrollEnabled` keeps the
+                  // cursor and current line tappable once the cap is reached.
+                  scrollEnabled
+                  returnKeyType="default"
                   accessibilityLabel="Write a comment"
                   style={styles.commentInput}
                   maxLength={MAX_COMMENT_CHARS}

@@ -1,4 +1,4 @@
-"""ORM models. Import them here so Alembic autogenerate sees them.
+﻿"""ORM models. Import them here so Alembic autogenerate sees them.
 
 ``alembic/env.py`` imports this module for its side effect: every model below
 registers itself on ``Base.metadata``. A model defined in its own module but
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from app.db.base import Base
 from app.models.achievements import Achievement
+from app.models.calls import Call
 from app.models.career import (
     Company,
     CompanyMember,
@@ -27,15 +28,22 @@ from app.models.connections import Connection
 from app.models.education import Education
 from app.models.enums import (
     AchievementCategory,
+    CallMode,
+    CallStatus,
     CompanyMemberRole,
     CompanyMemberStatus,
     CompanySize,
     CompanyStatus,
     CompPeriod,
     ConnectionStatus,
+    CourseStatus,
+    CourseVisibility,
     EducationLevel,
     EmploymentType,
+    EnrollmentStatus,
     InstitutionStatus,
+    LectureKind,
+    LectureStatus,
     MediaKind,
     NotificationType,
     OpportunityStatus,
@@ -55,7 +63,9 @@ from app.models.enums import (
     WorkMode,
 )
 from app.models.experience import Experience
+from app.models.learning import Course, CourseLecture, CourseSection, Enrollment, LectureProgress
 from app.models.media import STORAGE_KIND_DATABASE, MediaAsset
+from app.models.learning import SavedItem
 from app.models.messaging import Conversation, ConversationMember, Message
 from app.models.notifications import Notification, UserDevice
 from app.models.posts import Post, PostComment, PostLike, PostMedia
@@ -82,16 +92,29 @@ __all__ = [
     "CompanySize",
     "CompanyStatus",
     "CompPeriod",
+    "Call",
+    "CallMode",
+    "CallStatus",
     "Connection",
     "ConnectionStatus",
     "Conversation",
     "ConversationMember",
+    "Course",
+    "CourseLecture",
+    "CourseSection",
+    "CourseStatus",
+    "CourseVisibility",
     "Education",
     "EducationLevel",
     "EmploymentType",
+    "Enrollment",
+    "EnrollmentStatus",
     "Experience",
     "Institution",
     "InstitutionStatus",
+    "LectureKind",
+    "LectureProgress",
+    "LectureStatus",
     "Message",
     "MediaAsset",
     "MediaKind",
@@ -131,5 +154,6 @@ __all__ = [
     "UserSkill",
     "UserStatus",
     "VerificationStatus",
+    "SavedItem",
     "WorkMode",
 ]

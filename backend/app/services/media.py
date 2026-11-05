@@ -627,6 +627,103 @@ def _is_member_readable(session: Session, media_id: uuid.UUID, kind: MediaKind) 
     return bool(_live_story_references(session, media_id))
 
 
+def _course_lecture_media_readable(
+    session: Session, viewer: User, media_id: uuid.UUID
+) -> bool:
+    """Whether an authenticated member may read this lecture's media bytes.
+
+    A hosted-video lecture's media is readable when its course is published
+    and public — the same visibility rule ``GET /courses/{id}`` enforces — and
+    either the lecture is a preview (free to any signed-in member) or the
+    viewer holds a non-cancelled enrolment in the course.
+
+    Returns ``False`` for anything that is not a course-lecture media pointer,
+    so the media table stays a non-public bucket for everything else.
+    """
+    from app.models import Course, CourseSection, CourseLecture, Enrollment
+    from app.models.enums import (
+        CourseStatus,
+        CourseVisibility,
+        EnrollmentStatus,
+        LectureKind,
+    )
+
+    row = session.execute(
+        select(CourseLecture.is_preview, Course.id)
+        .join(CourseSection, CourseSection.id == CourseLecture.section_id)
+        .join(Course, Course.id == CourseSection.course_id)
+        .where(
+            CourseLecture.media_id == media_id,
+            CourseLecture.kind == LectureKind.HOSTED_VIDEO,
+            Course.status == CourseStatus.PUBLISHED,
+            Course.visibility == CourseVisibility.PUBLIC,
+        )
+    ).one_or_none()
+
+    if row is None:
+        return False
+
+    is_preview, course_id = row
+    if is_preview:
+        return True
+
+    # Non-preview: viewer must be enrolled and not cancelled.
+    return bool(
+        session.scalar(
+            select(func.count())
+            .select_from(Enrollment)
+            .where(
+                Enrollment.student_id == viewer.id,
+                Enrollment.course_id == course_id,
+                Enrollment.status != EnrollmentStatus.CANCELLED,
+            )
+        )
+    )
+
+
+def _conversation_member_readable(
+    session: Session, media_id: uuid.UUID, viewer: User
+) -> bool:
+    """Whether ``viewer`` is a participant in a conversation whose message uses this
+    asset — the rule that lets a message attachment reach its **recipient**.
+
+    **Why this is separate from :func:`_is_member_readable`.** A post image is
+    member-readable by *any* authenticated account, because a post is a public row.
+    A message attachment is the opposite: it is private to the two people in the
+    thread, so folding it into the broad rule would expose every private photo and
+    video to every member who guessed its id. This check is therefore
+    **conversation-scoped and viewer-scoped**: the asset is readable exactly when a
+    **live** (non-deleted) message in a conversation the viewer belongs to points at
+    it.
+
+    The join is the whole rule — ``messages.media_id`` to ``conversation_members``
+    filtered by ``user_id == viewer.id`` — so a stranger, a member of a different
+    thread, and a reader of a *deleted* message all fail it and receive the same 404
+    :func:`serve` already gives for a missing asset (§16).
+    """
+
+    # Imported here, as the other cross-model queries in this module are, to keep
+    # the import graph acyclic: messaging must not be a load-time dependency of the
+    # media service.
+    from app.models.messaging import ConversationMember, Message
+
+    return bool(
+        session.scalar(
+            select(func.count())
+            .select_from(Message)
+            .join(
+                ConversationMember,
+                ConversationMember.conversation_id == Message.conversation_id,
+            )
+            .where(
+                Message.media_id == media_id,
+                Message.deleted_at.is_(None),
+                ConversationMember.user_id == viewer.id,
+            )
+        )
+    )
+
+
 def serve(session: Session, viewer: User, raw_id: str) -> tuple[MediaAsset, bytes]:
     """``GET /media/{id}`` — the bytes, for the uploader *or any member* when a
     visible row already publishes the asset.
@@ -670,9 +767,16 @@ def serve(session: Session, viewer: User, raw_id: str) -> tuple[MediaAsset, byte
         # serve this" in the same shape as "not yours" rather than leaking a 500.
         raise _not_found()
 
-    if owner_id != viewer.id and not _is_member_readable(session, asset_id, kind):
+    if (
+        owner_id != viewer.id
+        and not _is_member_readable(session, asset_id, kind)
+        and not _conversation_member_readable(session, asset_id, viewer)
+        and not _course_lecture_media_readable(session, viewer, asset_id)
+    ):
         # Same answer as a missing asset, and raised before the bytes are read
-        # out, so an unauthorised call costs an index lookup.
+        # out, so an unauthorised call costs an index lookup. A message attachment
+        # reaches a non-owner only through the conversation-scoped check above, so
+        # a private photo stays private to the two people in the thread.
         raise _not_found()
 
     return (
@@ -798,6 +902,30 @@ def _detach_inactive_stories(session: Session, media_id: uuid.UUID) -> int:
     return len(inactive)
 
 
+def _live_message_references(session: Session, media_id: uuid.UUID) -> int:
+    """How many **live** messages still attach this asset.
+
+    ``messages.media_id`` has no foreign key — Phase 5 deferred it to the media
+    phase and this is that phase paying it — so the database will *not* refuse a
+    delete the way ``post_media``/``stories`` RESTRICT would. Without this check a
+    caller could delete the bytes out from under a message the recipient still has,
+    leaving a bubble whose image 404s. A soft-deleted message is a tombstone and no
+    longer shows its attachment, so it does not pin the asset: only
+    ``deleted_at IS NULL`` rows count, matching ``_live_post_references``.
+    """
+
+    from app.models.messaging import Message
+
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(Message)
+            .where(Message.media_id == media_id, Message.deleted_at.is_(None))
+        )
+        or 0
+    )
+
+
 def delete(session: Session, viewer: User, raw_id: str) -> None:
     """``DELETE /media/{id}`` — owner only, and reference-checked (§14.11).
 
@@ -832,8 +960,9 @@ def delete(session: Session, viewer: User, raw_id: str) -> None:
 
     in_a_post = _live_post_references(session, row.id)
     in_a_story = _live_story_references(session, row.id)
-    if in_a_post or in_a_story:
-        where = "post" if in_a_post else "story"
+    in_a_message = _live_message_references(session, row.id)
+    if in_a_post or in_a_story or in_a_message:
+        where = "post" if in_a_post else "story" if in_a_story else "message"
         raise ApiError(
             status_code=409,
             code=ErrorCode.CONFLICT,
@@ -859,8 +988,8 @@ def delete(session: Session, viewer: User, raw_id: str) -> None:
     session.commit()
 
 
-def list_owned(session: Session, viewer: User, *, limit: int = 50) -> list[MediaAsset]:
-    """The caller's own assets, newest first. A helper, not a route.
+def list_owned(session: Session, viewer: User, *, limit: int = 50) -> list[MediaRead]:
+    """The caller's own assets, newest first.
 
     §11.4's ``GET /media`` is a limits document, so there is deliberately **no**
     public listing endpoint — the specification lists none and the client calls
@@ -868,27 +997,38 @@ def list_owned(session: Session, viewer: User, *, limit: int = 50) -> list[Media
     one.
 
     ``data`` is not among the selected columns, which is the whole point of
-    keeping this separate from the retrieval path.
+    keeping this separate from the retrieval path. The result is a list of
+    ``MediaRead`` (metadata only, no bytes), safe to serialise over HTTP.
     """
 
-    return list(
-        session.scalars(
-            select(
-                MediaAsset.id,
-                MediaAsset.kind,
-                MediaAsset.mime_type,
-                MediaAsset.size_bytes,
-                MediaAsset.width,
-                MediaAsset.height,
-                MediaAsset.served_at,
-                MediaAsset.owner_id,
-                MediaAsset.created_at,
-            )
-            .where(MediaAsset.owner_id == viewer.id)
-            .order_by(MediaAsset.created_at.desc(), MediaAsset.id.desc())
-            .limit(limit)
+    rows = session.execute(
+        select(
+            MediaAsset.id,
+            MediaAsset.kind,
+            MediaAsset.mime_type,
+            MediaAsset.size_bytes,
+            MediaAsset.width,
+            MediaAsset.height,
+            MediaAsset.served_at,
+            MediaAsset.created_at,
         )
-    )
+        .where(MediaAsset.owner_id == viewer.id)
+        .order_by(MediaAsset.created_at.desc(), MediaAsset.id.desc())
+        .limit(limit)
+    ).all()
+
+    return [
+        MediaRead(
+            id=str(r.id),
+            kind=(r.kind.value if hasattr(r.kind, "value") else str(r.kind)),
+            mime_type=r.mime_type,
+            width=r.width,
+            height=r.height,
+            size_bytes=r.size_bytes,
+            served_at=r.served_at,
+        )
+        for r in rows
+    ]
 
 
 def set_avatar(session: Session, viewer: User, raw_id: str) -> None:

@@ -97,6 +97,21 @@ class EventType:
     POST_DELETED = "post.deleted"
     STORY_CREATED = "story.created"
 
+    #: Phase 14 — calling. A call is a lifecycle, so it has more than one event,
+    #: and each is *targeted* at exactly one participant — never a broadcast,
+    #: because a call invitation is private between two people.
+    #:
+    #: ``call.incoming`` fires the instant a call starts ringing; ``call.ended``
+    #: carries every terminal outcome (answered→ended, rejected, cancelled,
+    #: expired) in one type so the client has a single "the call is over" path
+    #: that reads ``status``. ``call.accepted`` tells the caller the callee
+    #: picked up and may now fetch a token and join the room. None of these
+    #: carries a token, a room URL or media data — the token is minted on demand
+    #: by the token endpoint; see ``realtime/call_events.py``.
+    CALL_INCOMING = "call.incoming"
+    CALL_ACCEPTED = "call.accepted"
+    CALL_ENDED = "call.ended"
+
 
 #: Every type this build can produce. An inbound event outside this set is
 #: rejected rather than forwarded, so a future publisher cannot accidentally
@@ -115,6 +130,9 @@ KNOWN_EVENT_TYPES: frozenset[str] = frozenset(
         EventType.POST_UPDATED,
         EventType.POST_DELETED,
         EventType.STORY_CREATED,
+        EventType.CALL_INCOMING,
+        EventType.CALL_ACCEPTED,
+        EventType.CALL_ENDED,
     }
 )
 

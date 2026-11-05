@@ -285,13 +285,14 @@ def test_a_failed_connection_transaction_publishes_nothing(
 # --- message notifications -------------------------------------------------
 
 
-def test_a_message_produces_both_realtime_events(
+def test_a_message_publishes_exactly_one_realtime_event(
     api_client, candidate, other_candidate, bus
 ):
-    """`message.created` and `notification.created` are both correct and distinct.
+    """`message.created` is the whole delivery signal; chat raises no badge.
 
-    The thread needs the body; the badge needs the notification. Publishing one
-    without the other leaves the recipient with a stale count or an empty thread.
+    The thread needs the body and gets it on the message event. The Notifications
+    inbox does not list chat, so a `notification.created` for one would announce
+    a row nobody can see.
     """
     conversation = open_conversation(api_client, other_candidate, candidate)
     drain()
@@ -307,23 +308,16 @@ def test_a_message_produces_both_realtime_events(
     drain()
 
     messages = published(bus, EventType.MESSAGE_CREATED)
-    notifications = published(bus, EventType.NOTIFICATION_CREATED)
     assert len(messages) == 1
-    assert len(notifications) == baseline + 1
-
-    # Same recipient, different payloads.
-    event = notifications[-1]
     assert messages[0].recipient_user_id == other_candidate.id
-    assert event.recipient_user_id == other_candidate.id
     assert messages[0].payload["body"] == "hello"
-    # The notification carries no message text — §13.2 keeps private content out
-    # of the second table, and the event must not put it back.
-    assert event.payload["type"] == "message"
-    assert event.payload["body"] is None
-    assert "hello" not in event.to_json()
+
+    # Nothing added to the notification stream — chat lives in the Messages
+    # section, not the Notifications inbox.
+    assert len(published(bus, EventType.NOTIFICATION_CREATED)) == baseline
 
 
-def test_a_duplicate_message_publishes_exactly_one_of_each(
+def test_a_duplicate_message_publishes_exactly_one_event(
     api_client, candidate, other_candidate, bus
 ):
     conversation = open_conversation(api_client, other_candidate, candidate)
@@ -338,7 +332,7 @@ def test_a_duplicate_message_publishes_exactly_one_of_each(
     drain()
 
     assert len(published(bus, EventType.MESSAGE_CREATED)) == 1
-    assert len(published(bus, EventType.NOTIFICATION_CREATED)) == baseline + 1
+    assert len(published(bus, EventType.NOTIFICATION_CREATED)) == baseline
 
 
 def test_a_failed_message_publishes_neither_event(

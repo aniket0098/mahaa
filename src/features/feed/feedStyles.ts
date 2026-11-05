@@ -47,7 +47,14 @@ export const styles = StyleSheet.create({
   filterChipLabel: { color: colors.colorTextSecondary },
 
   /* ---------------------------------- list ---------------------------------- */
-  list: { gap: spacing.lg },
+  /**
+   * The ONE spacing between feed cards: `spacing.sm` (8pt) - a small,
+   * consistent vertical gap that separates cards without turning the feed
+   * into an airy list. Every variant (image, video, project, opportunity,
+   * skeleton) renders inside this one style, so the rhythm can never drift
+   * per card - there are deliberately no per-card margins anywhere below.
+   */
+  list: { gap: spacing.sm },
   card: { overflow: 'hidden' },
   cardBody: { gap: spacing.md, padding: spacing.cardPadding },
   /** Media is inset like the text, so the card's edges stay clean. */
@@ -354,8 +361,12 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sheetBody: { gap: spacing.md },
-  /** Lets the list shrink under the keyboard instead of being pushed off-screen. */
-  sheetKeyboard: { flexShrink: 1 },
+  /** The list AND the composer lift together: `flex: 1` gives this wrapper a
+   * measurable height, which is what `behavior="padding"` needs to compute its
+   * lift. Without it the wrapper collapses to zero height inside the Modal and
+   * the keyboard covers the composer; `flexShrink` then lets the list yield
+   * space instead of pushing the composer off-screen. */
+  sheetKeyboard: { flex: 1, flexShrink: 1, minHeight: 0 },
 
   /* ------------------------------ comment rows -------------------------------- */
   commentRow: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
@@ -365,22 +376,35 @@ export const styles = StyleSheet.create({
   commentPendingText: { color: colors.colorTextTertiary },
   commentComposerRow: { alignItems: 'center', justifyContent: 'center', minHeight: 72 },
 
-  /** The composer: a 48px field and a 44px send target, per the touch rules. */
-  commentComposer: { alignItems: 'flex-end', flexDirection: 'row', gap: spacing.sm },
+  /** The composer: a 48px field and a 44px send target, per the touch rules.
+   * The row never squeezes its children: the input shrinks (via `minWidth: 0`)
+   * instead of pushing Send off-screen, and Send never shrinks (via
+   * `flexShrink: 0`) so a long draft keeps the button tappable. */
+  commentComposer: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
   commentInput: {
     borderColor: colors.colorBorder,
     borderRadius: radius.control,
     borderWidth: 1,
     color: colors.colorTextPrimary,
     flex: 1,
+    flexShrink: 1,
+    maxHeight: 120,
     minHeight: 48,
+    minWidth: 0,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    textAlignVertical: 'top',
   },
   commentSend: {
     alignItems: 'center',
     backgroundColor: colors.colorPrimary,
     borderRadius: radius.full,
+    flexShrink: 0,
     height: 44,
     justifyContent: 'center',
     width: 44,
@@ -446,4 +470,12 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.pagePadding,
   },
+  /** The confirmation's two buttons: equal width, side by side, each 48px tall. */
+  confirmRow: { flexDirection: 'row', gap: spacing.md },
+  confirmButton: { flex: 1 },
+  /** The server's delete failure, rendered inside the dialog that caused it. */
+  deleteError: { color: colors.colorDanger },
+  /** The Delete row reads as destructive: red text AND red border, not colour alone. */
+  menuRowDanger: { borderColor: colors.colorDanger },
+  menuRowDangerText: { color: colors.colorDanger },
 });

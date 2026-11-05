@@ -51,7 +51,13 @@ describe('one advancement rule, guarded against duplicates', () => {
     expect(viewer).toMatch(/const goToNextStory = useCallback\(\(\) => \{/);
     expect(viewer).toContain('nextStoryPosition(groupsRef.current, positionRef.current)');
     // Competing forward paths would fight over position.
-    expect(viewer.match(/setPosition\(/g)?.length).toBe(3);
+    // Three movement paths plus one deletion reposition - each still routed
+    // through the pure rules of storyGroups, never an ad-hoc index write:
+    //   1. goToNextStory        (nextStoryPosition)
+    //   2. goToPreviousStory    (previousStoryPosition)
+    //   3. the refetch re-anchor (same story id, new indexes)
+    //   4. the deletion branch   (repositionAfterStoryRemoval)
+    expect(viewer.match(/setPosition\(/g)?.length).toBe(4);
   });
 
   it('a duplicated completion event advances exactly once', () => {
@@ -148,3 +154,78 @@ describe('See details appears only where it applies', () => {
   });
 });
 
+
+describe('the viewer opens by author, never by stale viewer state', () => {
+  const row = read('../home/OpportunityStories.tsx');
+  const screen = read('../../app/(candidate)/story/[id].tsx');
+
+  it('tapping a circle navigates by the author public id, not by a story id', () => {
+    expect(row).toContain('router.push(`/story/${group.authorPublicId}` as never)');
+    expect(row).not.toContain('group.stories[0].id');
+  });
+
+  it('the screen resolves the author against latest data, with the story id as fallback', () => {
+    expect(screen).toContain('positionForAuthor(groups, id) ?? positionForStoryId(groups, id)');
+    expect(screen).toContain('positionForStoryId(groups, id)');
+  });
+
+  it('a new selection remounts the viewer, atomically resetting position, player and callbacks', () => {
+    expect(screen).toContain('key={id}');
+  });
+});
+
+describe('delete own story from the viewer three-dot menu', () => {
+  const viewer = read('StoryViewer.tsx');
+
+  it('the overflow control is offered only on our own story', () => {
+    expect(viewer).toContain('const canDelete = Boolean(currentStory.isSelf) && !isDemoStory(currentStory);');
+    expect(viewer).toContain('testID="story-menu"');
+    expect(viewer).toMatch(/{canDelete \? \(/);
+  });
+
+  it('the confirmation repeats the spec copy with Cancel and Delete', () => {
+    expect(viewer).toContain('Delete this story permanently?');
+    expect(viewer).toContain('This action cannot be undone.');
+    expect(viewer).toContain('label="Cancel"');
+    expect(viewer).toContain('label="Delete"');
+    expect(viewer).toContain('testID="story-delete-confirm"');
+  });
+
+  it('deleting calls the real endpoint, filters the stories cache, and re-reads the tray', () => {
+    expect(viewer).toContain('await deleteStory(story.id);');
+    expect(viewer).toContain('setQueryData<FastApiPage<Story>>(queryKeys.stories');
+    expect(viewer).toContain('invalidateQueries({ queryKey: queryKeys.stories })');
+  });
+
+  it('a vanished story repositions through the single pure rule, or closes', () => {
+    expect(viewer).toContain('repositionAfterStoryRemoval(groups, positionRef.current');
+    expect(viewer).toContain('expectedStoryIdRef');
+  });
+});
+
+describe('the viewer tears its playback down before it disappears', () => {
+  const viewer = read('StoryViewer.tsx');
+
+  it('closing freezes playback before the animation starts', () => {
+    expect(viewer).toContain('const paused = held || backgrounded || closing;');
+    expect(viewer).toContain('setClosing(true);');
+  });
+
+  it('the animation completes before the route unmounts', () => {
+    expect(viewer).toContain('Animated.timing(closeProgress, {');
+    expect(viewer).toContain('useNativeDriver: true');
+    expect(viewer).toContain('if (finished) onCloseRef.current();');
+  });
+
+  it('the animation flies back to the originating bubble, with a centred fallback', () => {
+    expect(viewer).toContain('getStoryOrigin()');
+    expect(viewer).toContain('closeTarget.dx');
+    expect(viewer).toContain('closeTarget.scale');
+  });
+
+  it('Android hardware Back takes the same animated path as the X button', () => {
+    expect(viewer).toContain("BackHandler.addEventListener(");
+    expect(viewer).toContain('hardwareBackPress');
+    expect(viewer).toContain('startCloseRef.current();');
+  });
+});

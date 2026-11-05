@@ -13,7 +13,7 @@
  * the honest empty state stands: nothing is invented to fill the feed.
  */
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchPosts } from '@/api/posts';
@@ -107,12 +107,20 @@ export function useFeedPosts(filter: FeedFilter): FeedView {
   // list is empty the moment demo mode is off.
   const demoPosts = demoEnabled ? createDemoFeedPosts(new Date().toISOString()) : [];
 
+  const version = getLocalEngagementVersion();
   const { hidden } = snapshotLocalEngagement();
-  // `mergeFeed` keeps the demo gate in one place, and demo content is appended
-  // after the real posts so it can never lead the feed.
-  const merged = mergeFeed(postsQuery.data ?? [], demoPosts, {
-    demoEnabled,
-  }).filter((post) => !hidden.has(post.id));
+  // The list identity recomputes only when the data, the filter, or the
+  // engagement-store version changes — never on a parent re-render.
+  // `hidden` is read inside the memo from the same store version the memo
+  // declares as a dependency, so the list can never be one render behind.
+  const merged = useMemo(
+    () =>
+      mergeFeed(postsQuery.data ?? [], demoPosts, {
+        demoEnabled,
+      }).filter((post) => !hidden.has(post.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [postsQuery.data, demoPosts, demoEnabled, filter, version],
+  );
 
   return {
     posts: filterFeed(merged, filter),

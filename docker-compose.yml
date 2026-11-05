@@ -40,6 +40,15 @@ x-api-environment: &api-environment
   # this value, which is exactly the intended behaviour.
   JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081,http://localhost:8082,http://localhost:8083,http://localhost:8084,http://localhost:8085}
+  # Local-dev budget for the auth rate limiter (signup/login attempts per
+  # window per IP). The code default is 10/60s, which is right for production
+  # but throttles the live integration suites: both files create throwaway
+  # accounts and log in from 127.0.0.1, ~30 auth calls inside one window, and
+  # back-to-back `npm test` runs share the same in-memory budget. 60 keeps
+  # real throttling in place while letting a dev run the suite. A production
+  # deployment sets its own value (or uses the code default) — this key only
+  # exists in the local Compose file.
+  AUTH_RATE_LIMIT_PER_WINDOW: ${AUTH_RATE_LIMIT_PER_WINDOW:-60}
 
 services:
   postgres:

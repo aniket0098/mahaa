@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.users import UserSummary
 
@@ -65,16 +65,54 @@ class ConversationCreate(BaseModel):
     user_id: uuid.UUID
 
 
+class MessageAttachment(BaseModel):
+    """A photo or video attached to a message — the metadata a member may see.
+
+    Mirrors :class:`app.schemas.media.MediaRead` field-for-field, because a message
+    attachment *is* a media asset: the client joins ``served_at`` onto its base and
+    fetches the bytes through the same authenticated ``GET /media/{id}`` route a post
+    image uses. It carries no ``owner_id`` and no storage detail — §14.11 keeps both
+    server-side, and there is nothing here to leak.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    #: ``image`` or ``video`` — the two kinds a message may carry. A ``document`` is
+    #: private and owner-only (§11.5) and never appears attached to a message.
+    kind: str
+    mime_type: str
+    #: Server-derived for images (§11.3); ``None`` for video, which this build does
+    #: not decode.
+    width: int | None
+    height: int | None
+    size_bytes: int
+    #: The relative path the client joins onto its base, e.g. ``/api/v1/media/<id>``.
+    served_at: str
+
+
 class MessageCreate(BaseModel):
     """``POST /conversations/{id}/messages``.
 
     There is no ``sender_id``, and ``extra="forbid"`` is what turns a client that
     tries to supply one into a 422 instead of an impersonation.
+
+    **A message carries text, an attachment, or both.** ``body`` and ``media_id`` are
+    each optional, but at least one must be present: an empty text *and* no attachment
+    is the blank bubble this schema has always refused, so the pair is validated
+    together rather than either field alone. A photo with no caption is a real message
+    (``body`` null, ``media_id`` set); a text message is the long-standing shape
+    (``body`` set, ``media_id`` absent).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    body: str = Field(min_length=1, max_length=MESSAGE_BODY_MAX)
+    body: str | None = Field(default=None, max_length=MESSAGE_BODY_MAX)
+    #: The id of an already-uploaded ``media_assets`` row this message attaches. The
+    #: asset must belong to the caller and be an image or a video — both enforced in
+    #: the service, because ownership and kind are facts about a row, not about the
+    #: request.
+    media_id: uuid.UUID | None = None
     #: The sender's own idempotency key (§18). Optional, and absent means "do not
     #: bother": ordinary messages carry a NULL here, and PostgreSQL treats NULLs as
     #: distinct, so keyed and unkeyed messages never collide.
@@ -84,10 +122,23 @@ class MessageCreate(BaseModel):
 
     @field_validator("body")
     @classmethod
-    def _body_is_not_blank(cls, value: str) -> str:
-        if not value.strip():
+    def _body_is_not_blank_when_present(cls, value: str | None) -> str | None:
+        """Whitespace-only is never stored; ``None`` means "no text" and is allowed.
+
+        A present-but-blank body is refused here rather than coerced to ``None``, so a
+        client that sends ``"   "`` alongside a photo gets the same answer it always
+        did for a text message, instead of a silently-dropped caption.
+        """
+        if value is not None and not value.strip():
             raise ValueError(_NO_CONTENT_MESSAGE)
         return value
+
+    @model_validator(mode="after")
+    def _has_some_content(self) -> "MessageCreate":
+        """At least one of a real body or an attachment must be present."""
+        if self.body is None and self.media_id is None:
+            raise ValueError(_NO_CONTENT_MESSAGE)
+        return self
 
 
 class MessageUpdate(BaseModel):
@@ -130,12 +181,17 @@ class MessageRead(BaseModel):
     id: str
     conversation_id: str
     sender: UserSummary
-    #: Null exactly when ``deleted_at`` is set — the tombstone of a soft delete.
+    #: Null when the message has no text — a photo or video with no caption, or the
+    #: tombstone of a soft delete (in which case ``deleted_at`` is set too).
     body: str | None
     client_message_id: str | None
     created_at: str
     edited_at: str | None
     deleted_at: str | None
+    #: The attached photo or video, when the message carries one. ``None`` for a
+    #: text-only message, and ``None`` for a tombstone: a deleted message reveals
+    #: neither its text nor its attachment.
+    media: MessageAttachment | None = None
 
 
 class ConversationRead(BaseModel):

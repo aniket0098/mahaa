@@ -253,7 +253,7 @@ describe('tabsForRole', () => {
       tabsForRole('candidate')
         .filter((tab) => tab.implemented)
         .map((tab) => tab.name),
-    ).toEqual(['home', 'profile']);
+    ).toEqual(['home', 'messages', 'learn', 'profile']);
     expect(
       tabsForRole('employer')
         .filter((tab) => tab.implemented)

@@ -1,0 +1,96 @@
+src/app/(candidate)/learn/index.tsx(307,26): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(307,107): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(308,29): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(308,86): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(316,15): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(320,8): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(343,19): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(344,25): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(346,64): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(347,34): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(347,85): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(349,19): error TS17002: Expected corresponding JSX closing tag for 'Pressable'.
+src/app/(candidate)/learn/index.tsx(350,15): error TS1005: '}' expected.
+src/app/(candidate)/learn/index.tsx(350,17): error TS17002: Expected corresponding JSX closing tag for 'View'.
+src/app/(candidate)/learn/index.tsx(351,13): error TS1005: ')' expected.
+src/app/(candidate)/learn/index.tsx(352,12): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(366,9): error TS1005: ';' expected.
+src/app/(candidate)/learn/index.tsx(372,19): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(373,25): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(375,64): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(376,34): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(376,85): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(378,19): error TS17002: Expected corresponding JSX closing tag for 'Pressable'.
+src/app/(candidate)/learn/index.tsx(379,15): error TS1005: '}' expected.
+src/app/(candidate)/learn/index.tsx(379,17): error TS17002: Expected corresponding JSX closing tag for 'View'.
+src/app/(candidate)/learn/index.tsx(380,13): error TS1005: ')' expected.
+src/app/(candidate)/learn/index.tsx(381,11): error TS1161: Unterminated regular expression literal.
+src/app/(candidate)/learn/index.tsx(382,17): error TS1005: ';' expected.
+src/app/(candidate)/learn/index.tsx(382,30): error TS1005: ',' expected.
+src/app/(candidate)/learn/index.tsx(383,20): error TS1005: ',' expected.
+src/app/(candidate)/learn/index.tsx(389,37): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(391,45): error TS1005: '}' expected.
+src/app/(candidate)/learn/index.tsx(391,52): error TS1003: Identifier expected.
+src/app/(candidate)/learn/index.tsx(392,19): error TS1005: ',' expected.
+src/app/(candidate)/learn/index.tsx(392,32): error TS1005: ',' expected.
+src/app/(candidate)/learn/index.tsx(392,38): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(393,82): error TS1005: ':' expected.
+src/app/(candidate)/learn/index.tsx(394,36): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(394,37): error TS1003: Identifier expected.
+src/app/(candidate)/learn/index.tsx(394,139): error TS1002: Unterminated string literal.
+src/app/(candidate)/learn/index.tsx(396,19): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(397,17): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(398,15): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(399,13): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(399,14): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(399,15): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(400,11): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(401,9): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(402,7): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(402,9): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(402,15): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(407,17): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(408,23): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(411,32): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(411,83): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(413,17): error TS17002: Expected corresponding JSX closing tag for 'Pressable'.
+src/app/(candidate)/learn/index.tsx(414,13): error TS1005: '}' expected.
+src/app/(candidate)/learn/index.tsx(414,15): error TS17002: Expected corresponding JSX closing tag for 'View'.
+src/app/(candidate)/learn/index.tsx(415,11): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(416,9): error TS1161: Unterminated regular expression literal.
+src/app/(candidate)/learn/index.tsx(417,15): error TS1005: ';' expected.
+src/app/(candidate)/learn/index.tsx(417,28): error TS1005: ',' expected.
+src/app/(candidate)/learn/index.tsx(424,9): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(425,7): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(428,13): error TS1005: ';' expected.
+src/app/(candidate)/learn/index.tsx(428,26): error TS1005: ',' expected.
+src/app/(candidate)/learn/index.tsx(430,17): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(431,25): error TS1005: '}' expected.
+src/app/(candidate)/learn/index.tsx(431,26): error TS1005: '...' expected.
+src/app/(candidate)/learn/index.tsx(431,67): error TS1003: Identifier expected.
+src/app/(candidate)/learn/index.tsx(433,62): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(434,32): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(434,83): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(436,17): error TS17002: Expected corresponding JSX closing tag for 'Pressable'.
+src/app/(candidate)/learn/index.tsx(437,13): error TS1005: '}' expected.
+src/app/(candidate)/learn/index.tsx(438,11): error TS1381: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?
+src/app/(candidate)/learn/index.tsx(439,10): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(447,11): error TS2657: JSX expressions must have one parent element.
+src/app/(candidate)/learn/index.tsx(448,30): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(448,40): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(448,78): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(450,15): error TS17002: Expected corresponding JSX closing tag for 'View'.
+src/app/(candidate)/learn/index.tsx(451,30): error TS1127: Invalid character.
+src/app/(candidate)/learn/index.tsx(451,30): error TS1005: ')' expected.
+src/app/(candidate)/learn/index.tsx(451,83): error TS1382: Unexpected token. Did you mean `{'>'}` or `&gt;`?
+src/app/(candidate)/learn/index.tsx(455,15): error TS17002: Expected corresponding JSX closing tag for 'SectionHeader'.
+src/app/(candidate)/learn/index.tsx(458,23): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(459,25): error TS1145: '{' or JSX element expected.
+src/app/(candidate)/learn/index.tsx(464,11): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(465,9): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(465,11): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(488,10): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(489,7): error TS1128: Declaration or statement expected.
+src/app/(candidate)/learn/index.tsx(490,5): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(491,3): error TS1109: Expression expected.
+src/app/(candidate)/learn/index.tsx(492,1): error TS1128: Declaration or statement expected.
