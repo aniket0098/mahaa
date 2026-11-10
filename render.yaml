@@ -65,17 +65,12 @@ services:
         sync: false
       - key: JWT_ALGORITHM
         value: "HS256"
-        sync: false
       - key: JWT_ISSUER
         value: "mahaa-api"
-        sync: false
       - key: JWT_AUDIENCE
         value: "mahaa-mobile"
-        sync: false
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "60"
-        sync: false
-
   # ---------------------------------------------------------------------------
   # Message service (message-docker-service) — added for the Docker-first
   # message-service deployment preparation. The backend block above is
@@ -210,17 +205,12 @@ services:
         sync: false
       - key: JWT_ALGORITHM
         value: "HS256"
-        sync: false
       - key: JWT_ISSUER
         value: "mahaa-api"
-        sync: false
       - key: JWT_AUDIENCE
         value: "mahaa-mobile"
-        sync: false
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "60"
-        sync: false
-
       # Object storage (S3/R2). Render ephemeral disk is never permanent media
       # storage; these are supplied by dashboard secrets.
       - key: VIDEO_STORAGE_KIND
