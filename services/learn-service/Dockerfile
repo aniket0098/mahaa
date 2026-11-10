@@ -14,7 +14,6 @@ RUN useradd --system --create-home --home-dir /home/appuser --shell /usr/sbin/no
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY app/ ./app/
-COPY alembic/ ./alembic/
 COPY pyproject.toml requirements.txt ./
 RUN chown -R appuser:appuser /app
 USER appuser
