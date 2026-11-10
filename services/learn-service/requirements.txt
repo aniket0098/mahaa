@@ -1,0 +1,28 @@
+# Mahaa Learn service — runtime dependencies.
+# Ranges, not exact pins, so a security patch arrives without a manual bump,
+# but bounded so a major release cannot land silently and change behaviour.
+# The versions mirror backend/requirements.txt deliberately: one operator, two
+# services, and a SQLAlchemy/Pydantic major bump landing in one but not the other
+# is how two services that share a database start disagreeing about types.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+sqlalchemy>=2.0.32,<2.1
+alembic>=1.13,<2.0
+psycopg[binary]>=3.2,<4.0
+psycopg2-binary>=2.0,<3.1
+
+# --- storage / S3/R2 ---------------------------------------------------------
+aiobotocore>=0.13
+
+# --- authentication ----------------------------------------------------------
+# PyJWT signs and verifies access tokens. V1 is access-token-only: no refresh
+# token, no server-side session, and therefore no rotation code to maintain.
+PyJWT>=2.8,<3.0
+
+# --- development / test only -------------------------------------------------
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0
+ruff>=0.6,<1.0

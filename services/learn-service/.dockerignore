@@ -1,0 +1,60 @@
+# Mahaa Learn service — Docker ignore.
+
+# Source files and directories never in the build context.
+.git
+.github
+.env
+.env.example
+.env.test
+.hg
+.bzr
+CVS
+_thoughts
+ stories
+*.md
+*.rst
+docs/
+scripts/
+tools/
+test_*
+*_test.py
+*_test.pyc
+.coverage
+.hypothesis/
+dist/
+build/
+develop-eggs/
+eggs/
+parts/
+sdist/
+wheels/
+.installation
+.env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# pyproject.toml — included in build context for Docker copies
+pip-log freeze
+pip-delete-partial
+pip-log.txt
+pip-options
+# If using pew: http://pew.readthedocs.org/en/latest/
+# Pyvenv.cfg
+.venv
+venv/
+ENV/
+.env/
+
+# Docker
+Dockerfile
+.dockerignore
+
+# PyPI
+.tox
+.coverage
+.cache
+nosetests/
+cover/

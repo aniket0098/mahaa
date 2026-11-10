@@ -57,6 +57,25 @@ services:
       - key: CORS_ORIGINS
         sync: false
 
+      # --- authentication must fail closed too -------------------------------
+      # JWT_SECRET is required in production (fail-closed). Set this in the
+      # Render dashboard to a random >=32-char string, e.g.:
+      #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_ALGORITHM
+        value: "HS256"
+        sync: false
+      - key: JWT_ISSUER
+        value: "mahaa-api"
+        sync: false
+      - key: JWT_AUDIENCE
+        value: "mahaa-mobile"
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+        sync: false
+
   # ---------------------------------------------------------------------------
   # Message service (message-docker-service) — added for the Docker-first
   # message-service deployment preparation. The backend block above is
@@ -128,3 +147,99 @@ services:
       # mobile-only client (it sends no Origin header).
       - key: CORS_ORIGINS
         sync: false
+
+  # ---------------------------------------------------------------------------
+  # Learn service (learn-docker-service) — independent Docker service for the
+  # Learn section of the MAHAJOB application. Shares the same Neon PostgreSQL
+  # database as the main backend and the same JWT credentials, but has its own
+  # Docker image, process, and deployment lifecycle.
+  #
+  # Build context notes (Render builds from the repository root):
+  #   rootDir:        services/learn-service   (build context = that directory)
+  #   dockerfilePath: Dockerfile               (services/learn-service/Dockerfile)
+  # The image copies only services/learn-service/app, alembic,
+  # pyproject.toml and requirements.txt — never backend/ or any .env file.
+  #
+  # Health: liveness GET /api/v1/health (never touches the database).
+  # Readiness GET /api/v1/ready exists for operators but is NOT the Render
+  # health check, for the same reason as the backend.
+  #
+  # Database: the same Neon PostgreSQL the backend uses (managed outside
+  # Render). No Render Postgres resource is created here.
+  #
+  # Auth: the mobile app signs in once against mahaa-backend-docker and sends
+  # the same bearer token here, so JWT_SECRET / JWT_ISSUER / JWT_AUDIENCE MUST
+  # be byte-identical to mahaa-backend-docker's values. They are sync: false
+  # below — copy them in the dashboard, never into this file.
+  #
+  # Storage: S3/R2 object storage is configured through dashboard secrets
+  # (VIDEO_STORAGE_KIND, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
+  # S3_ENDPOINT, S3_REGION). Render ephemeral disk is never used as permanent
+  # media storage.
+  #
+  # Public URL placeholder: https://learn-docker-service.onrender.com
+  # (Render assigns the real host).
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: learn-docker-service
+    runtime: docker
+    region: singapore
+    plan: free
+    rootDir: services/learn-service
+    dockerfilePath: Dockerfile
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PORT
+        value: "8001"
+
+      # `production` enables the fail-closed checks in app/core/config.py:
+      # the service refuses to start on a placeholder DATABASE_URL, on
+      # DEBUG=true, or on a wildcard CORS origin.
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+
+      # Same Neon PostgreSQL as the backend. Set once in the dashboard.
+      - key: DATABASE_URL
+        sync: false
+
+      # Shared-credential auth with the backend — copy the EXACT values from
+      # mahaa-backend-docker in the dashboard.
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_ALGORITHM
+        value: "HS256"
+        sync: false
+      - key: JWT_ISSUER
+        value: "mahaa-api"
+        sync: false
+      - key: JWT_AUDIENCE
+        value: "mahaa-mobile"
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+        sync: false
+
+      # Object storage (S3/R2). Render ephemeral disk is never permanent media
+      # storage; these are supplied by dashboard secrets.
+      - key: VIDEO_STORAGE_KIND
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+
+      # Exact origins, comma separated, never '*'. Empty is correct for a
+      # mobile-only client (it sends no Origin header).
+      - key: CORS_ORIGINS
+        sync: false
+  # test marker
+  # ---------------------------------------------------------------------------
+  # Learn service (learn-docker-service) � independent Docker service for the Learn section of the MAHAJOB application. Shares the same Neon PostgreSQL database as the main backend and the same JWT credentials, but has its own Docker image, process, and deployment lifecycle.
