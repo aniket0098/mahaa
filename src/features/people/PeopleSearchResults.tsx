@@ -59,9 +59,20 @@ function SuggestionRow({ person, selfPublicId }: SuggestionRowProps) {
       <Avatar name={person.name} src={person.avatar_url} size={40} />
 
       <View style={styles.identity}>
-        <AppText variant="small" weight="semibold" numberOfLines={1}>
-          {person.name}
-        </AppText>
+        <View style={styles.nameLine}>
+          <AppText variant="small" weight="semibold" numberOfLines={1}>
+            {person.name}
+          </AppText>
+        </View>
+
+        {person.role ? (
+          <View style={styles.headline}>
+            <AppText variant="caption" tone="secondary" numberOfLines={1}>
+              {person.role}
+            </AppText>
+          </View>
+        ) : null}
+
         <AppText variant="caption" tone="tertiary" numberOfLines={1}>
           {`@${person.username}`}
         </AppText>
@@ -131,6 +142,14 @@ const styles = StyleSheet.create({
   },
   identity: {
     flex: 1,
+    gap: 2,
+  },
+  nameLine: {
+    flexDirection: 'column',
+    gap: 1,
+  },
+  headline: {
+    flexDirection: 'row',
     gap: 2,
   },
   action: {
