@@ -214,9 +214,9 @@ def lookup_users(
     one however the owner's privacy is configured; the full filtered profile is
     ``GET /users/{public_id}``, which does not exist yet.
 
-    A suspended or deactivated account can still be *found*; nothing here filters on
-    status, because §5.2 does not ask for it. A suspended caller is refused by the
-    shared dependency before this runs, exactly as on every other route.
+    Suspended or deactivated accounts are never returned (they fail the
+    ``User.status == UserStatus.ACTIVE`` filter in ``find_users``), so neither a
+    name search nor an exact-handle resolution can surface an ineligible account.
     """
 
     return lookup_service.find_users(session, current_user, query)

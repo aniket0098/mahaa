@@ -44,7 +44,7 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError, ErrorCode, error_detail
-from app.models import ProfilePrivacy, User
+from app.models import ProfilePrivacy, User, UserStatus
 from app.schemas.users import UserSummary
 from app.services.media import avatar_url_for
 
@@ -131,6 +131,9 @@ def find_users(session: Session, viewer: User, query: str) -> list[UserSummary]:
         .where(
             # The caller is never a result.
             User.id != viewer.id,
+            # Only active accounts are reachable by search; suspended or
+            # deactivated accounts are ineligible and must not surface.
+            User.status == UserStatus.ACTIVE,
             or_(
                 # Resolves regardless of privacy: they were handed this identifier.
                 exact_handle,
